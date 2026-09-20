@@ -28,7 +28,7 @@
 
 | 목표 | 세부 내용 | 결과물 |
 | --- | --- | --- |
-| 보조 변수 없는 QUBO 정형화 | $n$-hop 도달 경로 수 최대화를 이동 효율의 대리 목적으로 사용한다. 경로와 역경로가 짝을 이루면 최고차 항이 상쇄되는 성질을 이용해 $n\in\{2,3\}$에서 2차식을 유지하고 유량 보존 항을 더한다 | `mr2s-module/mr2s_module/qubo` |
+| QUBO 정형화 | $n$-hop 도달 경로 수 최대화를 이동 효율의 대리 목적으로 사용한다. 경로와 역경로가 짝을 이루면 최고차 항이 상쇄되는 성질을 이용해 $n\in\{2,3\}$에서 2차식을 유지하고 유량 보존 항을 더한다 | `mr2s-module/mr2s_module/qubo` |
 | 전역 조건의 국소화 | 평면 그래프의 단위 면을 거대면(macro-face)으로 군집화하고 경계를 닫아 순환 방향을 부여한다. 이를 통해 전역 strong connectivity 조건을 부분 그래프의 국소 조건으로 바꾼다 | `mr2s-module/mr2s_module/cycle` |
 | 하드웨어 탑재 최적화 | degeneracy 판정으로 분할 수 $k$를 이분 탐색하고, 차수 2 체인을 초간선으로 축약해 Pegasus $P_{16}$에 올릴 수 있는 크기로 줄인다 | `mr2s_module/reduction`, `mr2s_module/solver/partition` |
 | 서비스화와 검증 | 최적화 기능을 HTTP API로 제공하고, 디지털 트윈 군중 시뮬레이션으로 방향화 결과를 동적으로 검증한다 | `mr2s-backend`, `mr2s-frontend`, `twin-world` |
