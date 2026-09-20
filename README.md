@@ -391,6 +391,8 @@ python main.py poster-results --sizes 5 10 20 --output-dir results/poster --no-c
 
 | 자료 | 위치 |
 | --- | --- |
+| 착수 보고서 | `docs/01.보고서/01.착수보고서.pdf` |
+| 중간 보고서 | `docs/01.보고서/02.중간보고서.pdf` |
 | 최종 보고서 | `docs/01.보고서/03.최종보고서.pdf` |
 | 포스터 | `docs/02.포스터/포스터파일.pdf` |
 | 산업체 자문의견서 | `docs/04.자문의견서/산업체_자문의견서.pdf` |
@@ -398,7 +400,7 @@ python main.py poster-results --sizes 5 10 20 --output-dir results/poster --no-c
 | 논문 한국어판 | `documents/paper/ko/main.pdf` |
 | 논문 영어판 | `documents/paper/en/main.pdf` |
 
-> **작성 필요** — `docs/01.보고서/01.착수보고서.pdf`, `02.중간보고서.pdf`, `docs/03.발표자료/` 의 두 파일은 아직 0바이트 자리표시자다.
+> **작성 필요** — `docs/03.발표자료/발표자료.pdf` 와 `발표자료.pptx` 는 아직 0바이트 자리표시자다.
 
 #### 6.2. 시연 영상
 
