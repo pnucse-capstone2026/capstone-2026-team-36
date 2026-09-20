@@ -227,7 +227,6 @@ capstone-2026-team-36
 │   ├── api/                  Upstage Solar LLM 호출 serverless function
 │   └── docs/                 API 및 백엔드 참고 문서
 ├── simulation-react/         2D 군중 시뮬레이션 선행 프로토타입
-├── simulation/               Unity 기반 초기 시뮬레이션 (웹 전환 이전 버전)
 ├── approach-analysis/        대규모 실험 하네스와 결과 원본
 │   ├── src/commands/         분석 명령 구현
 │   └── results/              JSON 원본, 그림, 분석 보고서
@@ -320,7 +319,6 @@ capstone-2026-team-36
 - Python 3.11 이상
 - Node.js 20.19 이상 또는 22.12 이상
 - (선택) D-Wave 계정과 `DWAVE_API_TOKEN`. 없으면 simulated annealing backend 로 전부 실행된다.
-- (선택) Unity Editor 6000.4.1f1 — `simulation` 을 열 때만 필요하다.
 
 **한 번에 설치·빌드**
 
