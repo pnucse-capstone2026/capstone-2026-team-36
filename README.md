@@ -154,6 +154,7 @@ sequenceDiagram
 capstone-2026-team-36
 ├── README.md
 ├── install_and_build.sh      전체 구성 요소 설치·빌드 스크립트
+├── run.sh                    backend 와 웹 클라이언트 실행·중지 스크립트
 ├── docs/                     제출 문서 (보고서 · 포스터 · 발표자료 · 자문의견서 · README 그림)
 ├── mr2s-module/              핵심 알고리즘 라이브러리 (Python)
 │   └── mr2s_module/          domain · reduction · cycle · qubo · solver · edge_orient · evaluator
@@ -271,8 +272,22 @@ capstone-2026-team-36
 Python 3.11 이상과 Node.js 20.19 이상(또는 22.12 이상)이 필요하다. D-Wave 계정과 `DWAVE_API_TOKEN`은 선택 사항이며, 없어도 simulated annealing backend로 모든 기능을 실행할 수 있다.
 
 ```bash
-./install_and_build.sh          # 전체 설치·빌드
+./install_and_build.sh   # 전체 설치·빌드
+./run.sh                 # backend 와 웹 클라이언트 세 개 실행
+./run.sh status          # 떠 있는 것과 주소 확인
+./run.sh stop            # 전부 내리기
 ```
+
+`./run.sh` 가 띄우는 주소는 다음과 같다. 로그는 `.run/logs/` 에 쌓인다.
+
+| 주소 | 내용 |
+| --- | --- |
+| http://localhost:5174 | twin-world — 디지털 트윈 시뮬레이션 (시연용) |
+| http://localhost:5173 | mr2s-frontend — 그래프 편집, 기법 비교 |
+| http://localhost:5175 | simulation-react — 2D 프로토타입 |
+| http://localhost:8000 | 최적화 API 서버. 화면은 없고 http://localhost:8000/api/v2/solvers 로 확인한다 |
+
+구성 요소를 하나씩 다루려면 아래처럼 실행한다.
 
 ```bash
 # 알고리즘 라이브러리
@@ -294,12 +309,15 @@ cd ../approach-analysis && pip install -r requirements.txt
 python main.py poster-results --sizes 5 10 20 --output-dir results/poster --no-cache
 ```
 
-`mr2s-backend`는 8000번 포트를 사용하고, 웹 클라이언트는 Vite 기본 포트인 5173번을 사용한다. 웹 클라이언트는 배포된 백엔드(`https://quantum.yunseong.dev`)를 프록시를 통해 호출한다. 로컬 백엔드를 사용하려면 `vite.config.ts`의 프록시 대상 또는 `twin-world`의 `VITE_PROXY_TARGET`을 `http://localhost:8000`으로 바꾼다.
+웹 클라이언트는 셋 다 Vite 기본 포트인 5173번을 쓰므로 함께 띄울 때는 `--port`로 나눈다. 기본값은 배포된 백엔드(`https://quantum.yunseong.dev`)를 프록시로 호출하는 것이고, `twin-world`와 `simulation-react`는 `VITE_PROXY_TARGET`으로 로컬 백엔드를 가리킬 수 있다. `mr2s-frontend`는 프록시 대상이 `vite.config.ts`에 적혀 있어 그 파일을 고쳐야 한다. `./run.sh`는 이 설정을 모두 적용해 띄운다.
 
 #### 5.2. 오류 발생 시 해결 방법
 
 | 증상 | 해결 |
 | --- | --- |
+| `pip install -e .`가 `setuptools-scm was unable to detect version`으로 실패 | `mr2s-module`은 hatch-vcs로 git tag에서 버전을 읽는데 이 저장소에는 그 tag가 없다. `SETUPTOOLS_SCM_PRETEND_VERSION=0.1.8 pip install -e ".[test]"`로 설치한다. `install_and_build.sh`는 이 값을 이미 넣어 둔다 |
+| 웹 클라이언트를 띄웠더니 다른 앱이 열린다 | 셋 다 Vite 기본 포트 5173번을 쓰므로 먼저 띄운 것이 5173번을 차지하고 나머지가 5174, 5175번으로 밀린다. `npm run dev -- --port <번호>`로 지정한다 |
+| `mr2s-frontend`가 로컬 백엔드를 호출하지 않는다 | 프록시 대상이 `vite.config.ts`에 `https://quantum.yunseong.dev`로 적혀 있다. `VITE_PROXY_TARGET`을 읽는 `twin-world`, `simulation-react`와 달리 이 파일을 고쳐야 한다 |
 | `create_qa_solver`가 자격 증명 오류로 실패 | `DWAVE_API_TOKEN`을 설정하거나 `~/.config/dwave/dwave.conf`를 만든다. 하드웨어 없이 실행하려면 `create_sa_solver`를 사용한다 |
 | embedding 탐색이 끝나지 않는다 | `DnCMr2sSolver`로 거대면 분할을 켠다. 정점 200개 이상은 분할하지 않으면 embedding할 수 없다 |
 | strong connectivity를 만족하는 해를 얻지 못한다 | 체인 축약을 켠다. 희소한 그래프에서 성공률이 38%에서 98%로 올라간다 |

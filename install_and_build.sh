@@ -28,6 +28,9 @@ require() {
 install_module() {
   require python3
   log "mr2s-module 설치 (가상 환경 .venv)"
+  # mr2s-module 은 hatch-vcs 로 git tag 에서 버전을 읽는다. 이 저장소에는 그
+  # tag 가 없으므로 버전을 직접 알려 준다.
+  export SETUPTOOLS_SCM_PRETEND_VERSION="${MR2S_MODULE_VERSION:-0.1.8}"
   cd "$ROOT/mr2s-module"
   [ -d .venv ] || python3 -m venv .venv
   ./.venv/bin/pip install --upgrade pip
@@ -43,7 +46,7 @@ install_backend() {
   [ -d .venv ] || python3 -m venv .venv
   ./.venv/bin/pip install --upgrade pip
   ./.venv/bin/pip install -r requirements.txt
-  echo "실행: cd mr2s-backend && ./.venv/bin/python main.py  (http://localhost:8000)"
+  echo "실행: ./run.sh backend  (http://localhost:8000)"
 }
 
 install_web() {
@@ -55,7 +58,7 @@ install_web() {
     npm run build
   done
   echo "twin-world 는 실행 전에 .env.example 을 .env.local 로 복사하고 UPSTAGE_API_KEY 를 채운다."
-  echo "개발 서버 실행: cd <앱 디렉터리> && npm run dev  (http://localhost:5173)"
+  echo "개발 서버 실행: ./run.sh  (5173 · 5174 · 5175)"
 }
 
 install_analysis() {
