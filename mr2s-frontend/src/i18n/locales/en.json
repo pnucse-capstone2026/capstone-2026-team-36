@@ -1,0 +1,80 @@
+{
+  "header": {
+    "title": "Metropolitan Ring Road System",
+    "subtitle": "Enter an undirected graph and use path search to find the optimized directions.",
+    "switchToDark": "Switch to dark mode",
+    "switchToLight": "Switch to light mode",
+    "darkMode": "Dark mode",
+    "lightMode": "Light mode"
+  },
+  "nav": {
+    "optimizer": "Graph Optimizer",
+    "simulation": "Simulation"
+  },
+  "simulation": {
+    "title": "Simulation",
+    "description": "MR2S Simulation page."
+  },
+  "graphInput": {
+    "title": "Graph Input",
+    "apiSelection": "API Selection",
+    "solverHint": {
+      "qubo": "Partitions the graph, solves each part as a QUBO with simulated annealing",
+      "rawSa": "Anneals edge directions directly against APSP and flow metrics",
+      "robin": "One DFS pass orients every edge; fastest, but needs a bridgeless graph"
+    },
+    "vertices": "Vertices (comma-separated)",
+    "verticesPlaceholder": "e.g. 1,2,3,4,5",
+    "edges": "Edges (one per line, space or comma-separated)",
+    "edgesPlaceholder": "e.g.:\n1 2\n2 3\n3 4",
+    "drawGraph": "Draw Graph",
+    "pathSearch": "Path Search",
+    "reset": "Reset",
+    "benchmarkTitle": "Benchmark",
+    "nodeCount": "Node count (min 3)",
+    "runBenchmark": "Run Benchmark"
+  },
+  "resultPanel": {
+    "title": "Optimization Result",
+    "optimizedScore": "Optimized APSP Sum",
+    "bidirectionalScore": "Bidirectional APSP Sum",
+    "scoreDiff": "APSP Sum Difference",
+    "directedEdgeCount": "Optimized Directed Edge Count",
+    "unreachableNode": "(Unreachable node exists)"
+  },
+  "graphVisualization": {
+    "placeholder": "Enter a graph and click the \"Draw Graph\" button."
+  },
+  "debugPanel": {
+    "show": "▶ Show debug (Request/Response)",
+    "hide": "▼ Hide debug"
+  },
+  "loading": "Optimizing...",
+  "validation": {
+    "verticesEmpty": "Vertices cannot be empty.",
+    "invalidVertex": "Invalid vertex value: \"{{value}}\"",
+    "duplicateVertices": "Duplicate vertices found.",
+    "invalidEdgeFormat": "Invalid edge format (line {{line}}): \"{{value}}\". Use \"u v\" or \"u,v\" format.",
+    "invalidEdgeValue": "Invalid edge value (line {{line}}): \"{{value}}\"",
+    "selfLoop": "Self-loop not allowed (line {{line}}): \"{{u}} {{v}}\"",
+    "vertexNotFound": "Vertex {{vertex}} is not in the vertex list. (line {{line}})"
+  },
+  "errors": {
+    "unknown": "An unknown error occurred.",
+    "cors": "CORS or network error: Unable to connect to the server. Check the request status in the browser developer tools (F12) > Network tab. The server may need to allow CORS."
+  },
+  "language": "Language",
+  "benchmarkPanel": {
+    "title": "APSP Sum Comparison (Benchmark)",
+    "generating": "Generating planar graph...",
+    "running": "Running benchmark... (3 types × 10 runs)",
+    "graphInfo": "Graph: {{nodes}} nodes, {{edges}} edges",
+    "approach": "Graph Type",
+    "max": "Max APSP Sum",
+    "min": "Min APSP Sum",
+    "average": "Avg APSP Sum",
+    "weightBalance": "Avg Σ(In-Out)²",
+    "averageTime": "Average Time (ms)",
+    "failures": "Failures"
+  }
+}

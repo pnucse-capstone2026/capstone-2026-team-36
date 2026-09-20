@@ -1,0 +1,80 @@
+{
+  "header": {
+    "title": "Metropolitan Ring Road System",
+    "subtitle": "무방향 그래프를 입력하고 경로 탐색으로 최적화된 방향을 확인하세요.",
+    "switchToDark": "다크 모드로 전환",
+    "switchToLight": "라이트 모드로 전환",
+    "darkMode": "다크 모드",
+    "lightMode": "라이트 모드"
+  },
+  "nav": {
+    "optimizer": "그래프 최적화",
+    "simulation": "시뮬레이션"
+  },
+  "simulation": {
+    "title": "시뮬레이션",
+    "description": "MR2S 시뮬레이션 페이지입니다."
+  },
+  "graphInput": {
+    "title": "그래프 입력",
+    "apiSelection": "API 선택",
+    "solverHint": {
+      "qubo": "그래프를 분할해 각 부분을 QUBO + 시뮬레이티드 어닐링으로 계산",
+      "rawSa": "APSP와 흐름 지표를 직접 평가하며 간선 방향을 어닐링",
+      "robin": "DFS 한 번으로 전체 간선 방향 확정. 가장 빠르지만 브릿지 없는 그래프에서만 가능"
+    },
+    "vertices": "정점 (쉼표로 구분)",
+    "verticesPlaceholder": "예: 1,2,3,4,5",
+    "edges": "간선 (한 줄에 하나씩, 띄어쓰기 또는 쉼표)",
+    "edgesPlaceholder": "예:\n1 2\n2 3\n3 4",
+    "drawGraph": "그래프 그리기",
+    "pathSearch": "경로 탐색",
+    "reset": "초기화",
+    "benchmarkTitle": "벤치마크",
+    "nodeCount": "노드 수 (최소 3)",
+    "runBenchmark": "벤치마크 실행"
+  },
+  "resultPanel": {
+    "title": "최적화 결과",
+    "optimizedScore": "Optimized APSP 합",
+    "bidirectionalScore": "Bidirectional APSP 합",
+    "scoreDiff": "APSP 합 차이",
+    "directedEdgeCount": "최적화된 방향 간선 개수",
+    "unreachableNode": "(도달할 수 없는 노드 존재)"
+  },
+  "graphVisualization": {
+    "placeholder": "그래프를 입력하고 \"그래프 그리기\" 버튼을 눌러주세요."
+  },
+  "debugPanel": {
+    "show": "▶ 디버깅 보기 (Request/Response)",
+    "hide": "▼ 디버깅 접기"
+  },
+  "loading": "최적화 중...",
+  "validation": {
+    "verticesEmpty": "vertices가 비어있습니다.",
+    "invalidVertex": "잘못된 정점 값: \"{{value}}\"",
+    "duplicateVertices": "vertices에 중복이 있습니다.",
+    "invalidEdgeFormat": "잘못된 간선 형식 (줄 {{line}}): \"{{value}}\". \"u v\" 또는 \"u,v\" 형식으로 입력하세요.",
+    "invalidEdgeValue": "잘못된 간선 값 (줄 {{line}}): \"{{value}}\"",
+    "selfLoop": "self-loop 불가 (줄 {{line}}): \"{{u}} {{v}}\"",
+    "vertexNotFound": "정점 {{vertex}}가 vertices에 없습니다. (줄 {{line}})"
+  },
+  "errors": {
+    "unknown": "알 수 없는 오류가 발생했습니다.",
+    "cors": "CORS 또는 네트워크 오류: 서버에 연결할 수 없습니다. 브라우저 개발자 도구(F12) > Network 탭에서 요청 상태를 확인해보세요. 서버가 CORS를 허용하는지 확인이 필요합니다."
+  },
+  "language": "언어",
+  "benchmarkPanel": {
+    "title": "APSP 합 비교 (벤치마크)",
+    "generating": "평면 그래프 생성 중...",
+    "running": "벤치마크 실행 중... (3가지 × 10회)",
+    "graphInfo": "그래프: 노드 {{nodes}}개, 간선 {{edges}}개",
+    "approach": "그래프 유형",
+    "max": "최대 APSP 합",
+    "min": "최소 APSP 합",
+    "average": "평균 APSP 합",
+    "weightBalance": "평균 Σ(In-Out)²",
+    "averageTime": "평균 소요 시간 (ms)",
+    "failures": "실패 횟수"
+  }
+}

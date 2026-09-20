@@ -1,0 +1,56 @@
+name: Deploy video introduction to GitHub Pages
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "video/introduction/**"
+      - ".github/workflows/deploy-video-introduction.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v6
+
+      - name: Stage site
+        run: |
+          mkdir -p _site
+          cp -r video/introduction/. _site/
+
+      # project Pages 는 /documents/ 아래에 올라가므로 사이트 루트 절대 경로는
+      # 전부 404 가 난다. index.html 과 quantum-guardian-video.html 은 상대 경로만
+      # 써야 한다.
+      - name: Verify no root-absolute paths remain
+        run: |
+          if grep -n -E '(src|href)="/' _site/index.html _site/quantum-guardian-video.html; then
+            echo "사이트 루트 절대 경로가 남아 있다" >&2
+            exit 1
+          fi
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: _site
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5

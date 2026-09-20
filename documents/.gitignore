@@ -1,0 +1,42 @@
+## Core LaTeX auxiliary files
+*.aux
+*.fdb_latexmk
+*.fls
+*.log
+*.out
+*.synctex.gz
+*.toc
+
+## Bibliography files
+*.bbl
+*.blg
+*-blx.bib
+*.run.xml
+
+## Other common extensions
+*.bcf
+*.glg
+*.glo
+*.gls
+*.idx
+*.ilg
+*.ind
+*.ist
+*.lof
+*.lot
+*.nav
+*.snm
+*.vrb
+*.xdv
+
+## Build directories (e.g., if using latexmk or custom build scripts)
+build/
+out/
+
+## PDF output (Optional: keep if you want to track the final document)
+# *.pdf
+
+
+## Mac 
+.DS_Store
+
