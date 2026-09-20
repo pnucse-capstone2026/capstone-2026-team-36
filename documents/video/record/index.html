@@ -1,0 +1,297 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Quantum Guardian 팀 · 대사별 녹음</title>
+<style>
+:root{--paper:#f3efe6;--ink:#20252a;--quiet:#6d7479;--rule:#c9c2b6;--accent:#176b87;--warm:#c65d35;--ok:#3d7a4a}
+html,body{margin:0;background:var(--paper);color:var(--ink);font-family:"Segoe UI","Malgun Gothic",sans-serif;font-size:15px}
+header{display:flex;flex-wrap:wrap;gap:8px 20px;align-items:baseline;padding:10px 20px;border-bottom:1px solid var(--rule)}
+header b{font-size:16px}header span{color:var(--quiet);font-size:13px}
+main{display:grid;grid-template-columns:minmax(0,1fr) 420px;gap:0;height:calc(100dvh - 44px)}
+.stage{min-width:0;border-right:1px solid var(--rule);display:flex;flex-direction:column}
+.stage iframe{flex:1;width:100%;border:0}
+.panel{display:flex;flex-direction:column;min-height:0}
+.current{padding:14px 18px;border-bottom:1px solid var(--rule)}
+.meta{color:var(--quiet);font-size:13px}
+.meta b{color:var(--ink);font-size:15px}
+#text{margin:8px 0 12px;font-size:17px;line-height:1.5;word-break:keep-all}
+.controls{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.opt{font-size:13px;color:var(--quiet);display:flex;align-items:center;gap:4px;margin-left:auto}
+button{font:inherit;padding:6px 12px;border:1px solid var(--rule);background:#fff;color:var(--ink);cursor:pointer;border-radius:4px}
+button:disabled{opacity:.45;cursor:default}
+button.rec{border-color:var(--warm);color:var(--warm);font-weight:600}
+button.rec.on{background:var(--warm);color:#fff}
+#status{width:100%;min-height:1.4em;font-size:13px;color:var(--quiet)}
+#status.warn{color:var(--warm)}
+ol{list-style:none;margin:0;padding:0;overflow:auto;flex:1}
+li{display:grid;grid-template-columns:34px 1fr auto;gap:10px;padding:8px 18px;border-bottom:1px solid color-mix(in srgb,var(--rule) 55%,transparent);cursor:pointer;font-size:13px;line-height:1.4}
+li:hover{background:#fff8}
+li.sel{background:#fff;box-shadow:inset 3px 0 var(--accent)}
+li .n{color:var(--quiet);font-variant-numeric:tabular-nums}
+li .t{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+li .s{white-space:nowrap;font-variant-numeric:tabular-nums;color:var(--quiet)}
+li .s.done{color:var(--ok)}li .s.over,li .s.stale{color:var(--warm)}
+.export{padding:12px 18px;border-top:1px solid var(--rule);display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:13px}
+.export span{width:100%;color:var(--quiet)}
+body.exporting header,body.exporting .panel{display:none}
+body.exporting main{display:block;height:auto}
+body.exporting .stage{border:0;display:block}
+body.exporting .stage iframe{display:block}
+#exportOverlay{position:fixed;left:0;right:0;bottom:0;display:flex;gap:12px;align-items:center;padding:10px 20px;background:var(--ink);color:var(--paper);font-size:14px}
+#exportOverlay button{background:transparent;color:var(--paper);border-color:var(--paper)}
+@media(max-width:900px){main{grid-template-columns:1fr;grid-template-rows:auto 1fr;height:auto}.stage{border-right:0;border-bottom:1px solid var(--rule)}.stage iframe{aspect-ratio:16/11}}
+</style>
+</head>
+<body>
+<header><b>대사별 녹음</b><span>Space: 녹음 시작·정지 · ← →: 대사 이동 · P: 다시 듣기 · 녹음본은 이 브라우저의 IndexedDB 에만 저장됩니다</span></header>
+<main>
+ <section class="stage"><iframe src="../introduction/quantum-guardian-video.html" title="발표 화면"></iframe></section>
+ <section class="panel">
+  <div class="current">
+   <div class="meta">대사 <b id="num">–</b> / <span id="total">–</span> · 영상 구간 <span id="window">–</span></div>
+   <p id="text">발표 화면을 불러오는 중입니다.</p>
+   <div class="controls">
+    <button id="rec" class="rec">● 녹음</button>
+    <button id="play">▶ 다시 듣기</button>
+    <button id="del">삭제</button>
+    <button id="prev">← 이전</button>
+    <button id="next">다음 →</button>
+    <label class="opt"><input type="checkbox" id="suppress"> 마이크 잡음 억제</label>
+    <div id="status"></div>
+   </div>
+  </div>
+  <ol id="list"></ol>
+  <div class="export">
+   <button id="trimStored">예전 녹음본 앞뒤 다듬기</button>
+   <button id="exportFixed">시간표 위치에 합친 wav</button>
+   <button id="exportPushed">겹치지 않게 밀어서 합친 wav</button>
+   <button id="exportClips">대사별 파일 전부</button>
+   <button id="exportVideoFollow">동영상 · 녹음 길이에 맞춰</button>
+   <button id="exportVideoFixed">동영상 · 영상 시간표대로</button>
+   <span id="exportNote"></span>
+  </div>
+ </section>
+</main>
+<div id="exportOverlay" hidden><span id="exportProgress"></span><button id="exportStop">중단</button></div>
+<script>
+(async()=>{
+const $=id=>document.getElementById(id);
+const frame=document.querySelector('iframe');
+const recButton=$('rec'),status=$('status'),list=$('list');
+const MIME='audio/webm;codecs=opus';
+let qg,cues=[],index=0,clips=new Map(),stream,recorder,chunks=[],recording=false,player=new Audio();
+const audioContext=new AudioContext();
+
+// IndexedDB: one record per cue index {id, text, blob, seconds, savedAt}.
+const db=await new Promise((resolve,reject)=>{const open=indexedDB.open('qg-narration',1);open.onupgradeneeded=()=>open.result.createObjectStore('clips',{keyPath:'id'});open.onsuccess=()=>resolve(open.result);open.onerror=()=>reject(open.error)});
+const store=mode=>db.transaction('clips',mode).objectStore('clips');
+const request=r=>new Promise((resolve,reject)=>{r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)});
+async function loadClips(){clips=new Map((await request(store('readonly').getAll())).map(clip=>[clip.id,clip]))}
+const saveClip=clip=>request(store('readwrite').put(clip));
+const deleteClip=id=>request(store('readwrite').delete(id));
+
+frame.addEventListener('load',async()=>{
+ qg=frame.contentWindow.qg;
+ if(!qg){status.textContent='발표 화면에서 대사 목록을 읽지 못했습니다. video/ 폴더를 하나의 로컬 서버로 열어야 합니다.';status.className='warn';return}
+ cues=qg.cues;
+ await loadClips();
+ $('total').textContent=cues.length;
+ renderList();select(0);
+});
+
+function clipState(i){
+ const clip=clips.get(i);if(!clip)return {label:'—',cls:''};
+ if(clip.text!==cues[i][2])return {label:'대사 바뀜',cls:'stale'};
+ const window=cues[i][1]-cues[i][0],over=clip.seconds-window;
+ return over>0?{label:`${clip.seconds.toFixed(1)}s · ${over.toFixed(1)}s 초과`,cls:'over'}:{label:`${clip.seconds.toFixed(1)}s`,cls:'done'};
+}
+function renderList(){
+ list.innerHTML=cues.map((cue,i)=>{const s=clipState(i);return `<li data-i="${i}" class="${i===index?'sel':''}"><span class="n">${i+1}</span><span class="t">${cue[2]}</span><span class="s ${s.cls}">${s.label}</span></li>`}).join('');
+}
+function select(i){
+ index=Math.max(0,Math.min(cues.length-1,i));
+ const cue=cues[index],s=clipState(index);
+ $('num').textContent=index+1;$('window').textContent=`${fmt(cue[0])}–${fmt(cue[1])} (${cue[1]-cue[0]}초)`;$('text').textContent=cue[2];
+ $('play').disabled=$('del').disabled=!clips.has(index);
+ $('prev').disabled=index===0;$('next').disabled=index===cues.length-1;
+ status.textContent=s.cls==='over'?`녹음이 영상 구간보다 ${s.label.split('·')[1].trim()}합니다. 더 짧게 다시 녹음하거나 "밀어서 합친 wav" 를 쓰세요.`:s.cls==='stale'?'녹음 뒤 대사가 바뀌었습니다. 다시 녹음하세요.':'';
+ status.className=s.cls==='done'||!s.cls?'':'warn';
+ qg.goCue(index);
+ renderList();list.querySelector('li.sel')?.scrollIntoView({block:'nearest'});
+}
+const fmt=s=>`${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`;
+
+async function toggleRecording(){
+ if(recording){recorder.stop();return}
+ // Chrome's own noise suppression and gain control, chosen with the checkbox.
+ const clean=$('suppress').checked;
+ try{stream??=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:clean,autoGainControl:clean}})}
+ catch(error){status.textContent='마이크를 열지 못했습니다: '+error.message;status.className='warn';return}
+ player.pause();
+ chunks=[];recorder=new MediaRecorder(stream,{mimeType:MIME});
+ recorder.ondataavailable=event=>chunks.push(event.data);
+ recorder.onstop=async()=>{
+  const raw=new Blob(chunks,{type:MIME});
+  const trimmed=trimBuffer(await audioContext.decodeAudioData(await raw.arrayBuffer()));
+  const clip={id:index,text:cues[index][2],blob:wavBlob(trimmed),seconds:trimmed.duration,trimmed:true,savedAt:Date.now()};
+  await saveClip(clip);clips.set(index,clip);
+  recording=false;recButton.classList.remove('on');recButton.textContent='● 녹음';
+  select(index);
+ };
+ recorder.start();recording=true;recButton.classList.add('on');recButton.textContent='■ 정지';
+ status.textContent='녹음 중… 다 읽고 나서 Space 나 정지를 누르세요.';status.className='';
+ qg.goCue(index);
+}
+function playClip(){const clip=clips.get(index);if(!clip)return;player.src=URL.createObjectURL(clip.blob);player.play();qg.goCue(index)}
+async function removeClip(){if(!clips.has(index))return;await deleteClip(index);clips.delete(index);select(index)}
+
+try{$('suppress').checked=localStorage.getItem('qg-suppress')!=='off'}catch{$('suppress').checked=true}
+$('suppress').onchange=()=>{try{localStorage.setItem('qg-suppress',$('suppress').checked?'on':'off')}catch{}if(stream){for(const track of stream.getTracks())track.stop();stream=null}};
+recButton.onclick=toggleRecording;$('play').onclick=playClip;$('del').onclick=removeClip;
+$('prev').onclick=()=>select(index-1);$('next').onclick=()=>select(index+1);
+list.onclick=event=>{const li=event.target.closest('li');if(li)select(Number(li.dataset.i))};
+document.addEventListener('keydown',event=>{
+ if(event.target.closest('button,input,select')&&event.key!==' ')return;
+ const actions={' ':toggleRecording,ArrowRight:()=>select(index+1),ArrowLeft:()=>select(index-1),p:playClip,P:playClip};
+ if(actions[event.key]){event.preventDefault();actions[event.key]()}
+});
+window.addEventListener('focus',()=>frame.blur());
+
+// Exports. "fixed" puts every clip at its cue start; "pushed" moves a clip
+// later when the previous one has not finished, and reports the new starts.
+async function decodeAll(){
+ const entries=[];
+ for(const [i,clip] of [...clips].sort((a,b)=>a[0]-b[0]))entries.push([i,await audioContext.decodeAudioData(await clip.blob.arrayBuffer())]);
+ return entries;
+}
+async function mixdown(mode){
+ const entries=await decodeAll();
+ const gap=0.25,starts=[];let cursor=0;
+ for(const [i,buffer] of entries){let start=cues[i][0];if(mode==='pushed')start=Math.max(start,cursor);starts.push([i,start]);cursor=start+buffer.duration+gap}
+ const total=Math.max(cues[cues.length-1][1],cursor)+1;
+ const rate=48000,offline=new OfflineAudioContext(1,Math.ceil(total*rate),rate);
+ entries.forEach(([i,buffer],k)=>{const source=offline.createBufferSource();source.buffer=buffer;source.connect(offline.destination);source.start(starts[k][1])});
+ return {entries,starts,total,buffer:await offline.startRendering()};
+}
+async function render(mode){
+ const {entries,starts,total,buffer}=await mixdown(mode);
+ if(!entries.length){$('exportNote').textContent='녹음본이 없습니다.';return}
+ download(wavBlob(buffer),mode==='fixed'?'narration-fixed.wav':'narration-pushed.wav');
+ const moved=starts.filter(([i,start])=>start!==cues[i][0]);
+ if(mode==='pushed'){download(new Blob([JSON.stringify(starts.map(([i,start])=>({index:i,start:Number(start.toFixed(2)),originalStart:cues[i][0],text:cues[i][2]})),null,1)],{type:'application/json'}),'narration-pushed-starts.json')}
+ $('exportNote').textContent=`${entries.length}개 클립 · 길이 ${fmt(Math.round(total))}`+(mode==='pushed'&&moved.length?` · 뒤로 밀린 대사 ${moved.length}개 (json 참고)`:'');
+}
+
+// Video export: Chrome captures this tab, cropped to the presentation iframe,
+// while the presentation plays in real time with the narration as the audio
+// track. 'follow' shows each cue for as long as its recording (plus a gap) and
+// then moves on; 'fixed' plays the video timeline with clips at cue starts.
+// Takes as long as the resulting video.
+const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+async function exportVideo(mode){
+ if(!navigator.mediaDevices.getDisplayMedia){$('exportNote').textContent='이 브라우저는 탭 화면 캡처를 지원하지 않습니다. Chrome 을 쓰세요.';return}
+ const {entries,buffer}=await mixdown('fixed');
+ const decoded=new Map(entries);
+ $('exportNote').textContent=entries.length?'':'녹음본이 없어 소리 없는 영상을 만듭니다.';
+ player.pause();
+ document.body.classList.add('exporting');qg.setExporting(true);
+ $('exportOverlay').hidden=false;$('exportProgress').textContent='화면 선택 창에서 이 탭을 고르세요.';
+ await fitFrame();
+ let display;
+ try{display=await navigator.mediaDevices.getDisplayMedia({video:{frameRate:30},audio:false,preferCurrentTab:true,selfBrowserSurface:'include',surfaceSwitching:'exclude'})}
+ catch(error){finishExport();$('exportNote').textContent='화면 캡처를 시작하지 못했습니다: '+error.message;return}
+ const [track]=display.getVideoTracks();
+ if(window.CropTarget&&track.cropTo){try{await track.cropTo(await CropTarget.fromElement(frame))}catch{}}
+ const destination=audioContext.createMediaStreamDestination();
+ const source=audioContext.createBufferSource();source.buffer=buffer;source.connect(destination);
+ const playing=new Set();
+ const recorder=new MediaRecorder(new MediaStream([track,...destination.stream.getAudioTracks()]),{mimeType:'video/webm;codecs=vp9,opus',videoBitsPerSecond:8_000_000});
+ const parts=[];recorder.ondataavailable=event=>parts.push(event.data);
+ const done=new Promise(resolve=>{recorder.onstop=resolve});
+ let stopped=false;const stop=()=>{if(stopped)return;stopped=true;recorder.stop();for(const node of playing)try{node.stop()}catch{}track.stop()};
+ track.onended=stop;$('exportStop').onclick=stop;
+ await audioContext.resume();
+ recorder.start(1000);
+ await sleep(500);
+ if(mode==='fixed'){
+  playing.add(source);source.start();qg.start();
+  while(!stopped&&qg.time<qg.duration){$('exportProgress').textContent=`녹화 중 ${fmt(Math.floor(qg.time))} / ${fmt(qg.duration)}`;await sleep(250)}
+ }else{
+  const gap=0.5;let elapsed=0;// seconds of silence after each recording before the next cue
+  for(let i=0;i<cues.length&&!stopped;i++){
+   qg.goCue(i);
+   const clip=decoded.get(i),seconds=clip?clip.duration+gap:cues[i][1]-cues[i][0];
+   if(clip){const node=audioContext.createBufferSource();node.buffer=clip;node.connect(destination);playing.add(node);node.onended=()=>playing.delete(node);node.start()}
+   $('exportProgress').textContent=`녹화 중 대사 ${i+1} / ${cues.length} · ${fmt(Math.round(elapsed))}`;
+   await sleep(seconds*1000);elapsed+=seconds;
+  }
+ }
+ await sleep(1500);stop();await done;
+ finishExport();
+ download(new Blob(parts,{type:'video/webm'}),mode==='fixed'?'quantum-guardian-introduction-fixed.webm':'quantum-guardian-introduction.webm');
+ $('exportNote').textContent='webm 을 내려받았습니다. mp4 로 바꾸는 ffmpeg 명령은 README 를 보세요.';
+}
+// Tab capture only records what is inside the viewport, so the presentation
+// is sized to fit it: full width when the window is wide enough, otherwise
+// scaled down. 44px stay free at the bottom for the progress overlay.
+async function fitFrame(){
+ window.scrollTo(0,0);
+ const maxWidth=Math.min(1280,document.documentElement.clientWidth),maxHeight=document.documentElement.clientHeight-44;
+ let width=maxWidth;
+ for(let pass=0;pass<3;pass++){
+  frame.style.width=width+'px';frame.style.height='10px';
+  await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+  const height=frame.contentDocument.documentElement.scrollHeight;
+  if(height<=maxHeight){frame.style.height=height+'px';return}
+  width=Math.floor(width*maxHeight/height)-2;
+ }
+ frame.style.height=maxHeight+'px';
+}
+function finishExport(){frame.style.width='';frame.style.height='';document.body.classList.remove('exporting');qg.setExporting(false);$('exportOverlay').hidden=true;qg.goCue(index)}
+// Recordings start and end with the key or mouse click that toggled them.
+// A click is a short transient, speech is not, so speech is taken to begin at
+// the first 0.1 s that stays loud and to end at the last such stretch; 0.15 s
+// of room tone is kept around it and 10 ms fades hide the cuts. Only 0.05 s
+// at each end is always dropped, so speech that starts at once survives.
+function trimBuffer(buffer){
+ const rate=buffer.sampleRate,data=buffer.getChannelData(0),edge=Math.round(0.05*rate),window=Math.round(0.01*rate),pad=Math.round(0.15*rate),hold=10;
+ let start=edge,end=data.length-edge;if(end-start<rate*0.2){start=0;end=data.length}
+ const loud=at=>{let sum=0;for(let i=at;i<Math.min(at+window,data.length);i++)sum+=data[i]*data[i];return Math.sqrt(sum/window)>0.01};
+ const sustained=at=>{for(let k=0;k<hold;k++)if(!loud(at+k*window))return false;return true};
+ let s=start;while(s+hold*window<end&&!sustained(s))s+=window;
+ let e=end;while(e-hold*window>s&&!sustained(e-hold*window))e-=window;
+ s=Math.max(start,s-pad);e=Math.min(end,e+pad);if(e-s<rate*0.2){s=start;e=end}
+ const out=new AudioBuffer({length:e-s,sampleRate:rate,numberOfChannels:1}),o=out.getChannelData(0);o.set(data.subarray(s,e));
+ const fade=Math.min(Math.round(0.01*rate),o.length>>1);for(let i=0;i<fade;i++){o[i]*=i/fade;o[o.length-1-i]*=i/fade}
+ return out;
+}
+async function trimStored(){
+ let count=0;
+ for(const [i,clip] of clips){
+  if(clip.trimmed)continue;
+  const trimmed=trimBuffer(await audioContext.decodeAudioData(await clip.blob.arrayBuffer()));
+  const next={...clip,blob:wavBlob(trimmed),seconds:trimmed.duration,trimmed:true};
+  await saveClip(next);clips.set(i,next);count+=1;
+ }
+ $('exportNote').textContent=count?`${count}개 녹음본의 앞뒤를 다듬었습니다.`:'다듬을 녹음본이 없습니다. 새 녹음은 저장할 때 자동으로 다듬습니다.';
+ select(index);
+}
+function wavBlob(buffer){
+ const data=buffer.getChannelData(0),out=new DataView(new ArrayBuffer(44+data.length*2));
+ const text=(offset,s)=>[...s].forEach((c,i)=>out.setUint8(offset+i,c.charCodeAt(0)));
+ text(0,'RIFF');out.setUint32(4,36+data.length*2,true);text(8,'WAVE');text(12,'fmt ');out.setUint32(16,16,true);out.setUint16(20,1,true);out.setUint16(22,1,true);out.setUint32(24,buffer.sampleRate,true);out.setUint32(28,buffer.sampleRate*2,true);out.setUint16(32,2,true);out.setUint16(34,16,true);text(36,'data');out.setUint32(40,data.length*2,true);
+ for(let i=0;i<data.length;i++){const v=Math.max(-1,Math.min(1,data[i]));out.setInt16(44+i*2,v<0?v*32768:v*32767,true)}
+ return new Blob([out],{type:'audio/wav'});
+}
+function download(blob,name){const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),10000)}
+$('exportFixed').onclick=()=>render('fixed');
+$('exportPushed').onclick=()=>render('pushed');
+$('exportVideoFollow').onclick=()=>exportVideo('follow');$('exportVideoFixed').onclick=()=>exportVideo('fixed');
+$('trimStored').onclick=trimStored;
+$('exportClips').onclick=()=>{for(const [i,clip] of [...clips].sort((a,b)=>a[0]-b[0]))download(clip.blob,`cue-${String(i+1).padStart(2,'0')}.${clip.blob.type==='audio/wav'?'wav':'webm'}`);$('exportNote').textContent=`${clips.size}개 파일을 내려받았습니다. 브라우저가 여러 파일 내려받기를 물으면 허용하세요.`};
+})();
+</script>
+</body>
+</html>

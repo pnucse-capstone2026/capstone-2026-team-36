@@ -1,0 +1,444 @@
+import itertools
+
+import networkx as nx
+import numpy as np
+import pytest
+
+from mr2s_module.cycle import FaceClusterPartition
+from mr2s_module.cycle.face_cluster_partition import _ComponentPartition
+from mr2s_module.domain import Edge, Graph
+from mr2s_module.util.planar_graph import (
+    build_edge_id_face_edges_map,
+    domain_graph_to_edge_subdivision,
+    enumerate_faces,
+    face_edge_steps,
+)
+from tests.util.graph_fixtures import delaunay_graph, graph_from_pairs
+
+
+def _edge_ids_for_endpoints(graph: Graph, u: int, v: int) -> set[int]:
+    endpoints = (u, v) if u <= v else (v, u)
+    return {edge.id for edge in graph.edges.values() if edge.endpoints() == endpoints}
+
+
+def _edge_id_for_endpoints(graph: Graph, u: int, v: int) -> int:
+    ids = _edge_ids_for_endpoints(graph, u, v)
+    assert len(ids) == 1
+    return next(iter(ids))
+
+
+def _endpoint_key(edge: Edge) -> tuple[int, int]:
+    return edge.endpoints()
+
+
+def test_empty_graph_returns_empty_partition() -> None:
+    result = FaceClusterPartition().run(Graph(edges=[]))
+    assert result.sub_graphs == []
+    assert result.remaining_edges == []
+
+
+def test_non_planar_graph_opts_out() -> None:
+    # K5 is the canonical non-planar graph; methodology must opt out and
+    # return the input untouched in remaining_edges.
+    pairs = list(itertools.combinations(range(5), 2))
+    graph = graph_from_pairs(pairs)
+    result = FaceClusterPartition().run(graph)
+
+    assert result.sub_graphs == []
+    assert {e.id for e in result.remaining_edges} == set(graph.edges.keys())
+    assert not any(e.directed for e in result.remaining_edges)
+
+
+def test_directed_input_graph_raises_error() -> None:
+    graph = Graph(
+        edges=[
+            Edge(0, 1, 1, True),
+            Edge(1, 2, 1, False),
+        ]
+    )
+
+    with pytest.raises(ValueError, match="undirected input graph"):
+        FaceClusterPartition().run(graph)
+
+
+def test_triangle_directs_its_three_boundary_edges() -> None:
+    graph = graph_from_pairs([(0, 1), (1, 2), (0, 2)])
+    result = FaceClusterPartition().run(graph)
+
+    directed = result.directed_edges()
+    assert {e.id for e in directed} == set(graph.edges.keys())
+
+
+def test_k4_directed_boundary_is_subset_of_input() -> None:
+    pairs = list(itertools.combinations(range(4), 2))
+    graph = graph_from_pairs(pairs)
+    result = FaceClusterPartition().run(graph)
+
+    input_ids = set(graph.edges.keys())
+    directed = result.directed_edges()
+    assert {e.id for e in directed}.issubset(input_ids)
+    assert len(directed) >= 3  # at least one face boundary survives
+
+
+def test_cut_vertex_components_are_processed_independently() -> None:
+    # Two triangles glued at vertex 2 — graph is not biconnected.
+    # Each biconnected sub-component should contribute its full triangle
+    # to remaining_edges with directions assigned.
+    graph = graph_from_pairs(
+        [
+            (0, 1),
+            (1, 2),
+            (0, 2),
+            (2, 3),
+            (3, 4),
+            (2, 4),
+        ]
+    )
+    result = FaceClusterPartition().run(graph)
+    ids = {e.id for e in result.directed_edges()}
+
+    assert {
+        _edge_id_for_endpoints(graph, 0, 1),
+        _edge_id_for_endpoints(graph, 0, 2),
+        _edge_id_for_endpoints(graph, 1, 2),
+    }.issubset(ids)
+    assert {
+        _edge_id_for_endpoints(graph, 2, 3),
+        _edge_id_for_endpoints(graph, 2, 4),
+        _edge_id_for_endpoints(graph, 3, 4),
+    }.issubset(ids)
+
+
+def test_directed_edges_carry_input_weight() -> None:
+    # FaceClusterPartition emits oriented Edge objects in remaining_edges so that
+    # define_edge_direction can replace the caller's undirected edges by id.
+    graph = Graph(
+        edges=[
+            Edge(0, 1, 7, False),
+            Edge(1, 2, 11, False),
+            Edge(0, 2, 13, False),
+        ]
+    )
+    weight_by_id = {e.id: e.weight for e in graph.edges.values()}
+
+    directed = FaceClusterPartition().run(graph).directed_edges()
+    assert len(directed) == 3
+
+    for produced in directed:
+        assert produced.directed is True
+        assert produced.id in weight_by_id
+        assert produced.weight == weight_by_id[produced.id]
+        u, v = produced.vertices
+        assert u != v
+        assert tuple(sorted((u, v))) == produced.endpoints()
+
+
+def test_directions_form_consistent_cycle_on_triangle() -> None:
+    # Triangle has a single inner face; all three edges must traverse the
+    # face in one direction (either all CW or all CCW), forming a cycle.
+    graph = graph_from_pairs([(0, 1), (1, 2), (0, 2)])
+
+    pairs = {
+        edge.vertices for edge in FaceClusterPartition().run(graph).directed_edges()
+    }
+    out_degree: dict[int, int] = {0: 0, 1: 0, 2: 0}
+    in_degree: dict[int, int] = {0: 0, 1: 0, 2: 0}
+    for u, v in pairs:
+        out_degree[u] += 1
+        in_degree[v] += 1
+
+    assert all(d == 1 for d in out_degree.values())
+    assert all(d == 1 for d in in_degree.values())
+
+
+def test_bridge_edges_pass_through_remaining_undirected() -> None:
+    # (3,4) and (2,3) sit in 1-edge biconnected components (bridges); the
+    # pipeline filters them out (len(bcc) < 3), so they must land in
+    # remaining_edges untouched (still undirected).
+    graph = graph_from_pairs(
+        [
+            (0, 1),
+            (1, 2),
+            (0, 2),
+            (2, 3),
+            (3, 4),
+        ]
+    )
+    result = FaceClusterPartition().run(graph)
+
+    by_id = {e.id: e for e in result.remaining_edges}
+    bridge_34 = _edge_id_for_endpoints(graph, 3, 4)
+    bridge_23 = _edge_id_for_endpoints(graph, 2, 3)
+    assert bridge_34 in by_id and not by_id[bridge_34].directed
+    assert bridge_23 in by_id and not by_id[bridge_23].directed
+    triangle_ids = {
+        _edge_id_for_endpoints(graph, 0, 1),
+        _edge_id_for_endpoints(graph, 0, 2),
+        _edge_id_for_endpoints(graph, 1, 2),
+    }
+    assert triangle_ids.issubset({e.id for e in result.directed_edges()})
+
+
+def test_self_loops_are_never_directed() -> None:
+    graph = Graph(
+        edges=[
+            Edge(0, 0, 1, False),
+            Edge(0, 1, 1, False),
+            Edge(1, 2, 1, False),
+            Edge(0, 2, 1, False),
+        ]
+    )
+    result = FaceClusterPartition().run(graph)
+
+    for edge in result.remaining_edges:
+        u, v = edge.endpoints()
+        if u == v:
+            assert not edge.directed
+    for e in result.directed_edges():
+        u, v = e.endpoints()
+        assert u != v
+
+
+@pytest.mark.parametrize("seed", [7, 11, 23])
+def test_delaunay_partition_is_complete_cover(seed: int) -> None:
+    np.random.seed(seed)  # snowball seeding uses np.random
+    graph = delaunay_graph(n=60, seed=seed)
+    result = FaceClusterPartition(target_k=6).run(graph)
+
+    input_ids = set(graph.edges.keys())
+    directed_ids = {e.id for e in result.directed_edges()}
+    assert directed_ids.issubset(input_ids)
+    assert len(directed_ids) > 0
+    covered_ids = {e.id for sg in result.sub_graphs for e in sg.edges.values()} | {
+        e.id for e in result.remaining_edges
+    }
+    assert covered_ids == input_ids
+
+
+def test_target_k_is_capped_to_face_count() -> None:
+    # Triangle has only one inner face; target_k=50 must not crash or stall.
+    graph = graph_from_pairs([(0, 1), (1, 2), (0, 2)])
+    result = FaceClusterPartition(target_k=50).run(graph)
+    assert {e.id for e in result.directed_edges()} == set(graph.edges.keys())
+
+
+def test_directed_boundary_edges_belong_to_input_graph() -> None:
+    np.random.seed(2026)
+    graph = delaunay_graph(n=80, seed=2026)
+    fc = FaceClusterPartition(target_k=8)
+    result = fc.run(graph)
+
+    nx_graph = nx.Graph()
+    for edge in graph.edges.values():
+        u, v = edge.endpoints()
+        if u != v:
+            nx_graph.add_edge(u, v)
+
+    is_planar, _ = nx.check_planarity(nx_graph)
+    assert is_planar
+    for edge in result.directed_edges():
+        u, v = edge.endpoints()
+        assert nx_graph.has_edge(u, v)
+
+
+def test_outline_of_returns_directed_boundary_touching_macro() -> None:
+    # Triangle: 단일 macro 의 외각 3변.
+    triangle = graph_from_pairs([(0, 1), (1, 2), (0, 2)])
+    triangle_partition = FaceClusterPartition().run(triangle)
+    assert len(triangle_partition.sub_graphs) == 1
+    triangle_outline = triangle_partition.outline_of(0)
+    assert {e.id for e in triangle_outline} == set(triangle.edges.keys())
+    assert all(e.directed for e in triangle_outline)
+
+    # Multi-face: outline_of(i) 는 sub_graphs[i] 의 directed 간선과 동일 (id 기준).
+    np.random.seed(31)
+    graph = delaunay_graph(n=50, seed=31)
+    partition = FaceClusterPartition(target_k=4).run(graph)
+
+    for macro_id in range(len(partition.sub_graphs)):
+        outline = partition.outline_of(macro_id)
+        sg_directed = [
+            e for e in partition.sub_graphs[macro_id].edges.values() if e.directed
+        ]
+        assert all(e.directed for e in outline)
+        assert {id(e) for e in outline} == {id(e) for e in sg_directed}
+
+    # 공유 boundary 는 양쪽 macro 에 동일 Edge 인스턴스로 등장해야 한다.
+    n = len(partition.sub_graphs)
+    by_id = [{e.id: id(e) for e in partition.outline_of(i)} for i in range(n)]
+    for i in range(n):
+        for j in range(i + 1, n):
+            for shared_id in by_id[i].keys() & by_id[j].keys():
+                assert by_id[i][shared_id] == by_id[j][shared_id]
+
+
+def test_get_inner_subgraph_returns_internal_edges_only() -> None:
+    np.random.seed(31)
+    graph = delaunay_graph(n=50, seed=31)
+    partition = FaceClusterPartition(target_k=4).run(graph)
+
+    for i, sg in enumerate(partition.sub_graphs):
+        inner = partition.get_inner_subgraph(i)
+        assert all(not e.directed for e in inner.edges.values())
+        expected_ids = {e.id for e in sg.edges.values() if not e.directed}
+        assert set(inner.edges.keys()) == expected_ids
+
+
+def test_get_subgraph_combines_inner_and_outline() -> None:
+    np.random.seed(31)
+    graph = delaunay_graph(n=50, seed=31)
+    partition = FaceClusterPartition(target_k=4).run(graph)
+
+    for i in range(len(partition.sub_graphs)):
+        inner = partition.get_inner_subgraph(i)
+        outline = partition.outline_of(i)
+        combined = partition.get_subgraph(i)
+
+        assert combined is partition.sub_graphs[i]
+        directed = [e for e in combined.edges.values() if e.directed]
+        undirected = [e for e in combined.edges.values() if not e.directed]
+        assert {e.id for e in directed} == {e.id for e in outline}
+        assert {e.id for e in undirected} == set(inner.edges.keys())
+
+
+def test_sub_graphs_disjoint_from_remaining() -> None:
+    np.random.seed(31)
+    graph = delaunay_graph(n=50, seed=31)
+    result = FaceClusterPartition(target_k=4).run(graph)
+
+    sub_ids = {e.id for sg in result.sub_graphs for e in sg.edges.values()}
+    remaining_ids = {e.id for e in result.remaining_edges}
+    assert sub_ids.isdisjoint(remaining_ids)
+
+
+def test_raises_when_undirected_edge_overlaps_between_subgraphs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Simulate a partition bug: one undirected boundary edge assigned to two macros.
+    edge = Edge(0, 1, 1, False)
+    graph = Graph(edges=[edge])
+    cycle = FaceClusterPartition()
+
+    monkeypatch.setattr(
+        cycle,
+        "_extract_biconnected_components",
+        lambda _graph: [object()],
+    )
+    monkeypatch.setattr(
+        cycle,
+        "_partition_component",
+        lambda _component: _ComponentPartition(
+            macro_internal_edges=[set(), set()],
+            macro_outline_keys=[{edge.id}, {edge.id}],
+            directed_steps=set(),
+        ),
+    )
+
+    with pytest.raises(
+        ValueError,
+        match=r"Undirected edge overlap detected across subgraphs",
+    ):
+        cycle.run(graph)
+
+
+def _first_boundary_pair_in_macro(result) -> tuple[int, int]:
+    """sub_graph 에 directed 로 등장하는(즉 owning macro 가 있는) boundary pair 하나."""
+    for sg in result.sub_graphs:
+        for edge in sg.edges.values():
+            if edge.directed:
+                u, v = edge.endpoints()
+                return u, v
+    raise AssertionError("no directed boundary edge inside any sub_graph")
+
+
+def _emitted_ids(result) -> set[int]:
+    return {e.id for sg in result.sub_graphs for e in sg.edges.values()} | {
+        e.id for e in result.remaining_edges
+    }
+
+
+def test_parallel_two_edge_face_map_keeps_both_edge_ids() -> None:
+    edge_a = Edge(0, 1, 1, False)
+    edge_b = Edge(0, 1, 1, False)
+    graph = Graph(edges=[edge_a, edge_b])
+
+    subdivision = domain_graph_to_edge_subdivision(graph)
+    faces = [face_edge_steps(face) for face in enumerate_faces(subdivision)]
+    face_edges_map = build_edge_id_face_edges_map(faces)
+
+    assert set(face_edges_map) == {edge_a.id, edge_b.id}
+    assert all(len(face_indices) == 2 for face_indices in face_edges_map.values())
+
+
+def test_parallel_two_edge_face_places_both_ids_in_macro() -> None:
+    edge_a = Edge(0, 1, 1, False)
+    edge_b = Edge(0, 1, 1, False)
+    graph = Graph(edges=[edge_a, edge_b])
+
+    result = FaceClusterPartition().run(graph)
+    directed = {edge.id: edge.vertices for edge in result.directed_edges()}
+
+    assert len(result.sub_graphs) == 1
+    assert set(result.sub_graphs[0].edges) == {edge_a.id, edge_b.id}
+    assert set(directed) == {edge_a.id, edge_b.id}
+    assert set(directed.values()) == {(0, 1), (1, 0)}
+
+
+def test_parallel_boundary_copy_placement_is_deterministic() -> None:
+    # 평행 copy 도 edge id 별로 배치된다. 같은 seed/입력 순서면 반복 결과가 같다.
+    np.random.seed(31)
+    base = delaunay_graph(n=50, seed=31)
+    u, v = _first_boundary_pair_in_macro(FaceClusterPartition(target_k=4).run(base))
+
+    def copy_macro_indices() -> list[int]:
+        edges = [*list(base.edges.values()), Edge(u, v, 1, False)]
+        parallel_id = edges[-1].id
+        graph = Graph(edges=edges)
+        np.random.seed(31)
+        result = FaceClusterPartition(target_k=4).run(graph)
+        owning = [
+            idx for idx, sg in enumerate(result.sub_graphs) if parallel_id in sg.edges
+        ]
+        assert owning
+        return owning
+
+    assert copy_macro_indices() == copy_macro_indices()
+
+
+def test_parallel_copy_on_inner_edge_preserves_both_ids() -> None:
+    # 평행 copy 가 추가되면 subdivision face topology 가 달라질 수 있다.
+    # 핵심 계약은 pair 단위 collapse 없이 두 edge id 모두 결과에 남는 것이다.
+    np.random.seed(31)
+    base = delaunay_graph(n=50, seed=31)
+    base_result = FaceClusterPartition(target_k=4).run(base)
+
+    inner_pair: tuple[int, int] | None = None
+    for sg in base_result.sub_graphs:
+        for edge in sg.edges.values():
+            if not edge.directed:
+                inner_pair = edge.endpoints()
+                break
+        if inner_pair is not None:
+            break
+    assert inner_pair is not None
+    u, v = inner_pair
+
+    edges = [*list(base.edges.values()), Edge(u, v, 1, False)]
+    parallel_id = edges[-1].id
+    multigraph = Graph(edges=edges)
+
+    np.random.seed(31)
+    result = FaceClusterPartition(target_k=4).run(multigraph)
+
+    pair_ids = _edge_ids_for_endpoints(multigraph, u, v)
+    emitted_ids = _emitted_ids(result)
+    assert pair_ids.issubset(emitted_ids)
+
+    # 같은 endpoint 의 두 copy 가 같은 Graph dict key 로 뭉개지지 않는다.
+    hosts = [
+        idx
+        for idx, sg in enumerate(result.sub_graphs)
+        if pair_ids & set(sg.edges.keys())
+    ]
+    assert hosts
+    assert parallel_id in pair_ids

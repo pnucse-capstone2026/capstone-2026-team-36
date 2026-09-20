@@ -1,0 +1,254 @@
+"""
+시각화 테스트 — `FaceClusterPartition` 파이프라인이 잘 도는지 눈으로 확인하기 위한 테스트.
+
+세 개의 패널을 그려 PNG 로 저장한다.
+  1. 원본 (Delaunay) 그래프
+  2. 추출된 면 — 외벽 보호 후 2-coloring 한 면들 + final_boundary
+  3. 회전 방향 — 각 면을 2-color 에 따라 CCW(파랑) 또는 CW(주황) 화살표로 표시
+
+`FaceClusterPartition.run` 결과와 진단용으로 재현한 파이프라인의 final_boundary 가
+일치해야 한다 (같은 numpy seed 하에서).
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+
+matplotlib = pytest.importorskip("matplotlib")
+
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+import networkx as nx
+import numpy as np
+from matplotlib.patches import Polygon
+
+pytest.importorskip("scipy.spatial")
+
+from mr2s_module.cycle import FaceClusterPartition
+from mr2s_module.cycle.face_clusterer import SnowballFaceClusterer
+from mr2s_module.domain import Graph
+from mr2s_module.util import (
+    build_dual_base,
+    build_edge_id_face_edges_map,
+    domain_graph_to_edge_subdivision,
+    domain_graph_to_networkx,
+    enumerate_faces,
+    face_edge_steps,
+    is_edge_node,
+    polygon_area,
+)
+from mr2s_module.util.planar_graph import Point, SubdivisionNode
+from tests.util.graph_fixtures import delaunay_graph_with_pos
+
+_OUTPUT_DIR = Path(__file__).parent / "output"
+_PALETTE = ("#1f77b4", "#ff7f0e")
+
+
+def _run_diagnostic(graph: Graph, pos: dict[int, np.ndarray], target_k: int) -> dict:
+    """`FaceClusterPartition._partition_component` 와 동일한 흐름을 순수 함수로 재현,
+    중간 산출물(면, 컴포넌트, 2-coloring) 을 함께 반환."""
+    nx_graph = domain_graph_to_networkx(graph)
+    subdivision = domain_graph_to_edge_subdivision(graph)
+    edge_endpoints = {edge.id: edge.endpoints() for edge in graph.edges.values()}
+    # subdivision 은 edge node 도 좌표가 필요하다 — 키가 int 가 아니다.
+    sub_pos: dict[SubdivisionNode, Point] = dict(pos.items())
+    for node in subdivision.nodes:
+        if is_edge_node(node):
+            u, v = edge_endpoints[node[1]]
+            sub_pos[node] = (pos[u] + pos[v]) / 2.0
+
+    is_planar, _ = nx.check_planarity(subdivision)
+    assert is_planar, "test fixture must be planar"
+    assert nx.is_biconnected(subdivision), "test fixture must be biconnected"
+
+    raw_faces = enumerate_faces(subdivision)
+    outer_idx = int(np.argmax([abs(polygon_area(f, sub_pos)) for f in raw_faces]))
+    inner_faces = [f for i, f in enumerate(raw_faces) if i != outer_idx]
+    inner_face_steps = [face_edge_steps(face) for face in inner_faces]
+
+    face_edges_map = build_edge_id_face_edges_map(inner_face_steps)
+    centroids = [
+        np.mean(np.asarray([sub_pos[v] for v in f], dtype=float), axis=0)
+        for f in inner_faces
+    ]
+    dual_base = build_dual_base(face_edges_map)
+
+    k = max(1, min(target_k, len(inner_faces)))
+    face_to_cluster = SnowballFaceClusterer().run(centroids, dual_base, k)
+
+    boundary, outer = FaceClusterPartition._collect_boundary_edges(
+        face_edges_map, face_to_cluster
+    )
+    repair = FaceClusterPartition._wall_protected_repair(subdivision, boundary, outer)
+    final_boundary = boundary.symmetric_difference(repair)
+
+    face_graph = nx.Graph()
+    face_graph.add_nodes_from(range(len(inner_faces)))
+    for e, f_idxs in face_edges_map.items():
+        if len(f_idxs) == 2 and e not in final_boundary:
+            face_graph.add_edge(f_idxs[0], f_idxs[1])
+    components = FaceClusterPartition._filter_ghost_components(
+        face_graph, inner_face_steps, outer, final_boundary
+    )
+
+    merged = FaceClusterPartition._build_merged_dual(
+        components, inner_face_steps, face_edges_map, final_boundary
+    )
+    if merged.number_of_nodes() > 0 and nx.is_bipartite(merged):
+        coloring = nx.bipartite.color(merged)
+    else:
+        coloring = dict.fromkeys(range(len(components)), 0)
+
+    return {
+        "nx_graph": nx_graph,
+        "inner_faces": inner_faces,
+        "inner_face_steps": inner_face_steps,
+        "components": components,
+        "final_boundary": final_boundary,
+        "coloring": coloring,
+        "edge_endpoints": edge_endpoints,
+        "sub_pos": sub_pos,
+    }
+
+
+def _draw_original(ax, nx_graph: nx.Graph, pos: dict[int, np.ndarray]) -> None:
+    ax.set_title("1. Original (Delaunay) graph", fontsize=14)
+    nx.draw_networkx_edges(
+        nx_graph, pos, ax=ax, alpha=0.5, edge_color="#666", width=0.7
+    )
+    nx.draw_networkx_nodes(nx_graph, pos, ax=ax, node_size=18, node_color="#222")
+    ax.set_aspect("equal")
+    ax.axis("off")
+
+
+def _draw_faces(ax, diag: dict, pos: dict[int, np.ndarray]) -> None:
+    ax.set_title(
+        f"2. Extracted faces (K={len(diag['components'])}, 2-colored)",
+        fontsize=14,
+    )
+    nx.draw_networkx_edges(
+        diag["nx_graph"], pos, ax=ax, alpha=0.10, edge_color="gray", width=0.5
+    )
+    for c_idx, comp in enumerate(diag["components"]):
+        color = _PALETTE[diag["coloring"].get(c_idx, 0) % 2]
+        for f_idx in comp:
+            face = diag["inner_faces"][f_idx]
+            poly = Polygon(
+                [diag["sub_pos"][v] for v in face],
+                facecolor=color,
+                alpha=0.65,
+                edgecolor="none",
+            )
+            ax.add_patch(poly)
+    nx.draw_networkx_edges(
+        diag["nx_graph"],
+        pos,
+        ax=ax,
+        edgelist=[
+            diag["edge_endpoints"][edge_id] for edge_id in diag["final_boundary"]
+        ],
+        edge_color="black",
+        width=2.5,
+    )
+    ax.set_aspect("equal")
+    ax.axis("off")
+
+
+def _draw_rotations(ax, diag: dict, pos: dict[int, np.ndarray]) -> None:
+    ax.set_title(
+        "3. Boundary cycle rotation (blue: CCW, orange: CW — from 2-coloring)",
+        fontsize=14,
+    )
+    nx.draw_networkx_edges(
+        diag["nx_graph"], pos, ax=ax, alpha=0.08, edge_color="gray", width=0.5
+    )
+
+    inner_face_steps = diag["inner_face_steps"]
+    final_boundary = diag["final_boundary"]
+    face_to_color: dict[int, int] = {}
+    for c_idx, comp in enumerate(diag["components"]):
+        c = diag["coloring"].get(c_idx, 0) % 2
+        for f_idx in comp:
+            face_to_color[f_idx] = c
+
+    # 추출된 컴포넌트들의 boundary cycle 만 화살표로 표시.
+    # - color 0 → 면 traversal 그대로 (CCW)
+    # - color 1 → 뒤집어서 traversal (CW)
+    # 인접한 두 컴포넌트의 색이 다르면 양쪽에서 같은 방향이 나오므로 dedupe.
+    drawn: set[tuple[int, int]] = set()
+    for f_idx, face in enumerate(inner_face_steps):
+        if f_idx not in face_to_color:
+            continue
+        color_idx = face_to_color[f_idx]
+        color = _PALETTE[color_idx]
+        traversal = (
+            face
+            if color_idx == 0
+            else [(edge_id, head, tail) for edge_id, tail, head in reversed(face)]
+        )
+        for edge_id, a, b in traversal:
+            if edge_id not in final_boundary:
+                continue
+            if (a, b) in drawn:
+                continue
+            drawn.add((a, b))
+            ax.annotate(
+                "",
+                xy=pos[b],
+                xytext=pos[a],
+                arrowprops={
+                    "arrowstyle": "-|>",
+                    "color": color,
+                    "lw": 1.6,
+                    "alpha": 0.95,
+                    "mutation_scale": 14,
+                },
+            )
+    ax.set_aspect("equal")
+    ax.axis("off")
+
+
+@pytest.mark.parametrize("seed", [42])
+def test_face_cycle_visualization_renders_three_panels(seed: int) -> None:
+    n_points, target_k = 60, 6
+    graph, pos = delaunay_graph_with_pos(n=n_points, seed=seed)
+
+    # 1. FaceClusterPartition.run() 자체가 정상적으로 boundary 를 반환하는지.
+    np.random.seed(seed)
+    partition = FaceClusterPartition(target_k=target_k).run(graph)
+    boundary_run = {e.id for e in partition.directed_edges()}
+    input_ids = set(graph.edges.keys())
+    assert boundary_run, "run() should produce non-empty directed boundary edges"
+    assert boundary_run.issubset(input_ids)
+
+    # 2. 시각화용 진단 파이프라인 — FaceClusterPartition 의 내부 planar_layout 대신
+    #    원본 Delaunay 좌표를 그대로 써서 외곽/centroid 를 계산.
+    #    그래서 run() 과 boundary 가 정확히 일치하지는 않지만,
+    #    동일한 정점/평면 임베딩 위에서의 또 다른 valid 한 2-coloring 을 그린다.
+    np.random.seed(seed)
+    diag = _run_diagnostic(graph, pos, target_k=target_k)
+
+    assert len(diag["components"]) > 0
+    assert len(diag["inner_faces"]) >= len(diag["components"])
+    assert set(diag["final_boundary"]).issubset(set(graph.edges))
+
+    fig, axes = plt.subplots(1, 3, figsize=(21, 7.5))
+    _draw_original(axes[0], diag["nx_graph"], pos)
+    _draw_faces(axes[1], diag, pos)
+    _draw_rotations(axes[2], diag, pos)
+    fig.suptitle(
+        f"FaceClusterPartition visualization — n={n_points}, target_k={target_k}, seed={seed}",
+        fontsize=15,
+        y=0.995,
+    )
+    fig.tight_layout(rect=(0, 0, 1, 0.96))
+
+    _OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    out_path = _OUTPUT_DIR / f"face_cycle_seed{seed}.png"
+    fig.savefig(out_path, dpi=140, bbox_inches="tight")
+    plt.close(fig)
+
+    assert out_path.exists()
+    assert out_path.stat().st_size > 0

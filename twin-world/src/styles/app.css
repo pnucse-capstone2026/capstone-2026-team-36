@@ -1,0 +1,538 @@
+/* Twin World — light "field instrument" theme.
+ *
+ * Every color, radius, and shadow used by the app is declared once here as a
+ * custom property; components only reference the tokens. The 3D scene has its
+ * own matching palette in src/three/sceneColors.ts (it cannot read CSS).
+ *
+ * The theme is deliberately light: the simulation's meaning is carried by the
+ * density ramp (green -> amber -> orange -> red), and those hues separate far
+ * better over a pale surface than over the near-black one this replaced -
+ * projector and daylight demos included.
+ */
+
+:root {
+  color-scheme: light;
+
+  /* Surfaces, from the page backdrop up to raised panels. Warm ivory rather
+     than white, matching the 3D scene's pale field. */
+  --paper: #f0eee6;
+  --surface: #faf9f5;
+  --surface-sunken: #e7e4d9;
+  --surface-hover: #f5f3ec;
+
+  /* Hairlines. --line-strong is for borders that carry structure (panel
+     edges), --line for incidental separators. */
+  --line: #e2ded1;
+  --line-strong: #cdc7b6;
+
+  /* Text. --ink-muted passes AA on --paper (5.9:1); --ink-faint is reserved
+     for non-essential hints that repeat information available elsewhere. */
+  --ink: #1f1e1c;
+  --ink-muted: #565248;
+  --ink-faint: #837d70;
+
+  /* One accent, used only for the active/primary state so it always means
+     "this is the thing you selected". */
+  --accent: #d97757;
+  --accent-hover: #c25f3e;
+  --accent-ink: #ffffff;
+  --accent-wash: #f7e4db;
+
+  /* Deeper and colder than the accent so a destructive control never reads
+     as merely selected. */
+  --danger: #a8231d;
+  --danger-wash: #f8e6e4;
+  --warn: #8a5406;
+
+  --radius-sm: 6px;
+  --radius: 10px;
+  --radius-lg: 14px;
+
+  --shadow-sm: 0 1px 2px rgba(27, 31, 36, 0.06);
+  --shadow: 0 1px 2px rgba(27, 31, 36, 0.06), 0 6px 16px -8px rgba(27, 31, 36, 0.18);
+
+  --font-sans: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont,
+    "Apple SD Gothic Neo", "Segoe UI", system-ui, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", "JetBrains Mono", Menlo, monospace;
+
+  font-family: var(--font-sans);
+  /* Korean UI text sits better slightly tightened; numbers stay tabular so
+     the live counters don't jitter as they tick. */
+  letter-spacing: -0.01em;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+}
+
+.app-shell {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  /* Faint grid, like graph paper under the plan. Anchored to the top-left so
+     it never drifts against the fixed header. */
+  background-image: linear-gradient(rgba(27, 31, 36, 0.028) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(27, 31, 36, 0.028) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+
+/* Header */
+
+.app-header {
+  padding: 0.9rem 1.5rem;
+  border-bottom: 1px solid var(--line-strong);
+  background: var(--surface);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.view-switch {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.app-header h1 {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}
+
+.app-header p {
+  margin: 0.2rem 0 0;
+  color: var(--ink-muted);
+  font-size: 0.85rem;
+}
+
+.app-main {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+
+.venue-scene {
+  flex: 1;
+  min-width: 0;
+}
+
+.sim-view {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+/* Toolbars. All three share the same band treatment so the app reads as one
+   surface with stacked control rows. */
+
+.sim-toolbar,
+.pov-toolbar,
+.compare-toolbar,
+.graph-toolbar,
+.scenario-input {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.6rem 1rem;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+  flex-wrap: wrap;
+}
+
+.sim-toolbar {
+  gap: 0.9rem;
+}
+
+.compare-toolbar {
+  gap: 1.25rem;
+}
+
+.scenario-input {
+  align-items: flex-start;
+}
+
+.sim-field {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.8rem;
+  color: var(--ink-muted);
+}
+
+.pov-toolbar-label {
+  color: var(--warn);
+  font-size: 0.82rem;
+}
+
+.pov-toolbar-hint,
+.graph-toolbar-hint {
+  color: var(--ink-faint);
+  font-size: 0.8rem;
+}
+
+.graph-toolbar-error {
+  color: var(--danger);
+  font-size: 0.8rem;
+}
+
+/* Risk banner between the toolbars and the scene - the run is watched in 3D,
+   so a crush has to announce itself rather than wait to be read in the
+   status line. */
+.sim-alert {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1rem;
+  padding: 0.5rem 1rem;
+  border-bottom: 1px solid var(--line);
+  background: var(--danger-wash);
+  color: var(--danger);
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+/* Form controls */
+
+.sim-field input,
+.sim-field select,
+.inspector-field input,
+.inspector-field select,
+.scenario-textarea {
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  color: var(--ink);
+  border-radius: var(--radius-sm);
+  padding: 0.35rem 0.5rem;
+  font-size: 0.85rem;
+  font-family: inherit;
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.sim-field input,
+.sim-field select {
+  width: 4.5rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.sim-field input:focus-visible,
+.sim-field select:focus-visible,
+.inspector-field input:focus-visible,
+.inspector-field select:focus-visible,
+.scenario-textarea:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-wash);
+}
+
+.sim-status {
+  color: var(--ink-muted);
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+  margin-left: auto;
+}
+
+.compare-tabs {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.comparison-table {
+  border-collapse: collapse;
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.comparison-table th,
+.comparison-table td {
+  padding: 0.25rem 0.7rem;
+  text-align: left;
+  color: var(--ink);
+}
+
+.comparison-table th {
+  color: var(--ink-muted);
+  font-weight: 500;
+}
+
+.venue-scene canvas {
+  display: block;
+}
+
+/* Venue picker */
+
+.venue-picker {
+  margin: auto;
+  padding: 2rem;
+  text-align: center;
+}
+
+.venue-picker h2 {
+  margin: 0 0 1.5rem;
+  font-size: 1.35rem;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}
+
+.venue-picker-options {
+  display: flex;
+  gap: 1rem;
+}
+
+.venue-picker-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  width: 260px;
+  padding: 1.25rem;
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  color: inherit;
+  font-family: inherit;
+  font-size: 0.95rem;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 140ms ease, box-shadow 140ms ease, transform 140ms ease;
+}
+
+.venue-picker-card:hover {
+  border-color: var(--accent);
+  box-shadow: var(--shadow);
+  transform: translateY(-2px);
+}
+
+.venue-picker-card:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-wash);
+}
+
+.venue-picker-card span {
+  color: var(--ink-muted);
+  font-size: 0.82rem;
+  font-weight: 400;
+}
+
+/* Graph editor */
+
+.graph-editor {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.toggle-button {
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  color: var(--ink);
+  border-radius: var(--radius-sm);
+  padding: 0.4rem 0.8rem;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.85rem;
+  transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+
+.toggle-button:hover:not(:disabled) {
+  background: var(--surface-hover);
+  border-color: var(--ink-faint);
+}
+
+.toggle-button:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-wash);
+}
+
+.toggle-button.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+
+.toggle-button.active:hover:not(:disabled) {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+
+.toggle-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.graph-canvas-row {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.graph-canvas {
+  flex: 1;
+  min-width: 0;
+}
+
+.graph-sidebar {
+  width: 260px;
+  border-left: 1px solid var(--line-strong);
+  background: var(--surface);
+  padding: 1rem;
+  overflow-y: auto;
+}
+
+/* xyflow node/canvas theming */
+
+.react-flow {
+  background: var(--surface-sunken);
+}
+
+.venue-node {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0.65rem;
+  border-radius: 999px;
+  border: 2px solid var(--line-strong);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+  color: var(--ink);
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+
+.venue-node-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* Small discrete connection points around the node perimeter (see
+   VenueNode.tsx for why these replaced a single full-cover handle). Kept
+   visible but subtle so users can find the exact drag-to-connect spot
+   without it competing with the node's own drag-to-move area. */
+.venue-node-handle-point {
+  width: 8px;
+  height: 8px;
+  background: var(--ink-faint);
+  border: 1px solid var(--surface);
+}
+
+.venue-node-handle-point:hover {
+  background: var(--accent);
+}
+
+/* Inspector panel */
+
+.inspector-panel h3 {
+  margin: 0 0 0.75rem;
+  font-size: 0.95rem;
+  font-weight: 650;
+}
+
+.inspector-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin-bottom: 0.75rem;
+  font-size: 0.8rem;
+  color: var(--ink-muted);
+}
+
+.inspector-meta {
+  color: var(--ink-faint);
+  font-size: 0.75rem;
+  font-family: var(--font-mono);
+  margin: 0 0 0.75rem;
+}
+
+.inspector-empty p {
+  color: var(--ink-faint);
+  font-size: 0.82rem;
+}
+
+.danger-button {
+  background: var(--danger-wash);
+  border: 1px solid var(--danger);
+  color: var(--danger);
+  border-radius: var(--radius-sm);
+  padding: 0.4rem 0.75rem;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.82rem;
+  width: 100%;
+  transition: background 120ms ease;
+}
+
+.danger-button:hover {
+  background: #f6dedc;
+}
+
+.danger-button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(163, 35, 27, 0.16);
+}
+
+/* AI scenario input + report panel */
+
+.scenario-textarea {
+  flex: 1;
+  min-width: 260px;
+  padding: 0.45rem 0.65rem;
+  resize: vertical;
+}
+
+.scenario-result {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  font-size: 0.82rem;
+  color: var(--ink-muted);
+}
+
+.scenario-warning {
+  color: var(--warn);
+  margin: 0;
+}
+
+.report-panel {
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.report-panel-actions {
+  display: flex;
+  gap: 0.6rem;
+}
+
+.report-body {
+  margin-top: 0.75rem;
+  font-size: 0.85rem;
+  line-height: 1.6;
+  max-height: 30vh;
+  overflow-y: auto;
+}
+
+.report-body h4 {
+  margin: 0.75rem 0 0.3rem;
+  color: var(--ink-muted);
+  font-size: 0.82rem;
+}
+
+.report-body ul {
+  margin: 0;
+  padding-left: 1.1rem;
+}

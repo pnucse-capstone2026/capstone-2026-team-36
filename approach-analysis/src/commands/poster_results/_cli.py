@@ -1,0 +1,333 @@
+"""``poster-results`` subcommand - MR2S poster visualization data generation."""
+
+from __future__ import annotations
+
+import argparse
+from typing import Any
+
+import networkx as nx
+
+from src.cache import generate_cache_key
+from .cache import CachedPosterAlgorithmWorker, CachedSplitTrialWorker
+from .models import (
+    Mr2sTrialResult,
+    PosterTrialResult,
+)
+from .plotting import _plot_results
+from .runner import (
+    Mr2sOnlyPosterResultsRunner,
+    PosterResultsAggregator,
+    PosterResultsRunner,
+    PosterRunConfig,
+    TrialScheduler,
+)
+from .solvers import (
+    _flow_imbalance_score,
+    _mean_finite,
+    _run_mr2s_trial,
+    _run_trial,
+    _sample_random_orientations,
+)
+from .partition_strategy import (
+    _can_recurse_partition,
+    _divide_graph_with_diagnostics,
+    _find_partition_by_target_k_with_diagnostics,
+    _probe_embedding,
+    _partition_with_target_k,
+    _summarize_partition_attempt,
+)
+from . import solvers as _solver_helpers
+from src.score_calculator import calculate_apsp_sum_and_nhop_neighbor_counts
+
+POSTER_CACHE_VERSION = 5
+TrialTask = tuple[int, int, int | None, str | None]
+
+
+def _calculate_random_baseline(
+    graph: nx.Graph,
+    n: int,
+    seed: int | None,
+    max_samples: int = 10,
+) -> dict[str, Any]:
+    random_samples = _solver_helpers._sample_random_orientations(graph, max_samples=max_samples, seed=seed)
+    trial_apsp = []
+    trial_flow = []
+
+    for orient in random_samples:
+        if nx.is_strongly_connected(orient):
+            apsp, _ = calculate_apsp_sum_and_nhop_neighbor_counts(orient, hops=[])
+            trial_apsp.append(apsp / (n * (n - 1)))
+        trial_flow.append(_flow_imbalance_score(orient))
+
+    return {
+        "apsp": _mean_finite(trial_apsp),
+        "flow": _mean_finite(trial_flow),
+        "sample_count": len(random_samples),
+        "strong_sample_count": len(trial_apsp),
+    }
+
+
+def _normalize_random_baseline(result: dict[str, Any]) -> dict[str, Any]:
+    sample_count = result.get("sample_count")
+    missing_legacy_sample = sample_count is None and result.get("apsp") == 0 and result.get("flow") == 0
+    if sample_count == 0 or missing_legacy_sample:
+        normalized = dict(result)
+        normalized["apsp"] = float("nan")
+        normalized["flow"] = float("nan")
+        normalized["sample_count"] = 0
+        return normalized
+    return result
+
+
+def _poster_trial_cache_key(n: int, trial: int, seed: int | None) -> str:
+    return generate_cache_key(
+        "poster-results-trial",
+        version=POSTER_CACHE_VERSION,
+        n=n,
+        trial=trial,
+        seed=seed,
+    )
+
+
+def _poster_mr2s_trial_cache_key(n: int, trial: int, seed: int | None) -> str:
+    return generate_cache_key(
+        "poster-results-mr2s-trial",
+        version=POSTER_CACHE_VERSION,
+        n=n,
+        trial=trial,
+        seed=seed,
+    )
+
+
+def _poster_algorithm_cache_key(n: int, trial: int, seed: int | None, algorithm: str) -> str:
+    return generate_cache_key(
+        "poster-results-algorithm",
+        version=POSTER_CACHE_VERSION,
+        n=n,
+        trial=trial,
+        seed=seed,
+        algorithm=algorithm,
+    )
+
+
+def _coerce_full_trial_result(result: PosterTrialResult | dict[str, Any]) -> PosterTrialResult:
+    if isinstance(result, PosterTrialResult):
+        return result
+    return PosterTrialResult.from_dict(result)
+
+
+def _coerce_mr2s_trial_result(result: Mr2sTrialResult | dict[str, Any]) -> Mr2sTrialResult:
+    if isinstance(result, Mr2sTrialResult):
+        return result
+    return Mr2sTrialResult.from_dict(result)
+
+
+def _run_trial_worker(
+    task: tuple[int, int, int | None],
+) -> tuple[int, int, PosterTrialResult | dict[str, Any]]:
+    return _solver_helpers._run_trial(task)
+
+
+def _run_algorithm_worker(n: int, trial: int, seed: int | None, algorithm: str) -> Any:
+    return _solver_helpers._run_poster_algorithm(n, trial, seed, algorithm)
+
+
+_run_trial_with_cache = CachedSplitTrialWorker(
+    full_worker=_run_trial_worker,
+    algorithm_runner=_run_algorithm_worker,
+    algorithm_cache_key=_poster_algorithm_cache_key,
+    legacy_trial_cache_key=_poster_trial_cache_key,
+    full_from_dict=PosterTrialResult.from_dict,
+    coerce_full_result=_coerce_full_trial_result,
+)
+
+
+def _run_mr2s_trial_worker(
+    task: tuple[int, int, int | None],
+) -> tuple[int, int, Mr2sTrialResult | dict[str, Any]]:
+    return _solver_helpers._run_mr2s_trial(task)
+
+
+_run_mr2s_trial_with_cache = CachedPosterAlgorithmWorker(
+    algorithm="poster",
+    fallback_worker=_run_mr2s_trial_worker,
+    algorithm_runner=_run_algorithm_worker,
+    algorithm_cache_key=_poster_algorithm_cache_key,
+    legacy_mr2s_cache_key=_poster_mr2s_trial_cache_key,
+    legacy_trial_cache_key=_poster_trial_cache_key,
+    mr2s_from_dict=Mr2sTrialResult.from_dict,
+    full_from_dict=PosterTrialResult.from_dict,
+    coerce_mr2s_result=_coerce_mr2s_trial_result,
+)
+
+
+def _process_pool_context() -> Any:
+    return TrialScheduler()._process_pool_context()
+
+
+def _iter_completed_trials(
+    worker: Any,
+    tasks: list[TrialTask],
+    num_workers: int,
+) -> Any:
+    yield from TrialScheduler().iter_completed(worker, tasks, num_workers)
+
+
+def _aggregate_mr2s_results(results: dict[str, Any], trial_results: dict[int, list[dict[str, Any]]]) -> dict[str, Any]:
+    return PosterResultsAggregator().merge_mr2s_only(results, trial_results)
+
+
+def run(
+    sizes: list[int],
+    num_graphs: int,
+    seed: int | None,
+    output_dir: str,
+    num_workers: int | None = None,
+    cache_dir: str | None = None,
+    use_cache: bool = True,
+) -> None:
+    config = PosterRunConfig(
+        sizes=sizes,
+        num_graphs=num_graphs,
+        seed=seed,
+        output_dir=output_dir,
+        num_workers=num_workers,
+        cache_dir=cache_dir,
+        use_cache=use_cache,
+    )
+    PosterResultsRunner(
+        config=config,
+        worker=_run_trial_with_cache,
+        progress_printer=_print_trial_progress,
+        plotter=_plot_results,
+    ).run()
+
+
+def run_mr2s_only(
+    sizes: list[int],
+    num_graphs: int,
+    seed: int | None,
+    output_dir: str,
+    num_workers: int | None = None,
+    cache_dir: str | None = None,
+    use_cache: bool = True,
+    source_results_path: str | None = None,
+) -> None:
+    config = PosterRunConfig(
+        sizes=sizes,
+        num_graphs=num_graphs,
+        seed=seed,
+        output_dir=output_dir,
+        num_workers=num_workers,
+        cache_dir=cache_dir,
+        use_cache=use_cache,
+    )
+    Mr2sOnlyPosterResultsRunner(
+        config=config,
+        worker=_run_mr2s_trial_with_cache,
+        progress_printer=_print_mr2s_trial_progress,
+        plotter=_plot_results,
+        source_results_path=source_results_path,
+    ).run()
+
+
+def _print_trial_progress(
+    index: int,
+    total: int,
+    n: int,
+    trial: int,
+    timings: dict[str, float],
+) -> None:
+    if timings.get("cache_hit"):
+        print(f"[{index}/{total}] n={n}, trial={trial}: cache hit")
+        return
+
+    print(
+        f"[{index}/{total}] n={n}, trial={trial}: "
+        f"Graph {timings.get('graph', 0.0):.2f}s, "
+        f"Raw SA {timings['raw_sa']:.2f}s, "
+        f"Global {timings['global_solve']:.2f}s + {timings['global_embed']:.2f}s, "
+        f"Clustered {timings['clustered_solve']:.2f}s + {timings['clustered_embed']:.2f}s, "
+        f"Random {timings['random']:.2f}s"
+    )
+
+
+def _print_mr2s_trial_progress(
+    index: int,
+    total: int,
+    n: int,
+    trial: int,
+    timings: dict[str, float],
+) -> None:
+    if timings.get("cache_hit"):
+        print(f"[{index}/{total}] n={n}, trial={trial}: MR2S-only cache hit")
+        return
+
+    print(
+        f"[{index}/{total}] n={n}, trial={trial}: "
+        f"Graph {timings.get('graph', 0.0):.2f}s, "
+        f"Clustered {timings['clustered_solve']:.2f}s + "
+        f"{timings['clustered_embed']:.2f}s"
+    )
+
+
+def register_parser(subparsers: argparse._SubParsersAction) -> None:
+    p = subparsers.add_parser("poster-results", help="Generate visualization data for MR2S poster.")
+    p.add_argument("--sizes", type=int, nargs="+", default=[100, 200, 300, 400, 500])
+    p.add_argument("--num-graphs", type=int, default=5)
+    p.add_argument("--seed", type=int, default=42)
+    p.add_argument("--output-dir", type=str, default="results/poster")
+    p.add_argument(
+        "--cache-dir",
+        type=str,
+        default=None,
+        help="Directory for per-trial cache files; defaults to OUTPUT_DIR/poster_trial_cache.",
+    )
+    p.add_argument(
+        "--no-cache",
+        action="store_true",
+        help="Disable reading and writing the per-trial cache.",
+    )
+    p.add_argument(
+        "--num-workers",
+        type=int,
+        default=None,
+        help="Worker processes to use; omit for auto, 0 for sequential.",
+    )
+    p.add_argument(
+        "--mr2s-only",
+        action="store_true",
+        help="Recompute only DnCMr2sSolver results and merge into existing poster_results.json.",
+    )
+    p.add_argument(
+        "--source-results",
+        type=str,
+        default=None,
+        help="Existing poster_results.json to merge in MR2S-only mode.",
+    )
+    p.set_defaults(func=_dispatch)
+
+
+def _dispatch(args: argparse.Namespace) -> None:
+    if args.mr2s_only:
+        run_mr2s_only(
+            args.sizes,
+            args.num_graphs,
+            args.seed,
+            args.output_dir,
+            args.num_workers,
+            args.cache_dir,
+            not args.no_cache,
+            args.source_results,
+        )
+        return
+
+    run(
+        args.sizes,
+        args.num_graphs,
+        args.seed,
+        args.output_dir,
+        args.num_workers,
+        args.cache_dir,
+        not args.no_cache,
+    )

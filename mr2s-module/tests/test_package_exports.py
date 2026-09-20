@@ -1,0 +1,39 @@
+from mr2s_module import (
+    ApspSumRanker,
+    BalancedFaceGraphClusterer,
+    DegeneracyPruningFaceCyclePartitionStrategy,
+    Edge,
+    EmbeddingAwareFaceCyclePartitionStrategy,
+    EmbeddingEstimate,
+    Evaluator,
+    FlowPolyGenerator,
+    Graph,
+    KMeansFaceClusterer,
+    NHop,
+    NHopPolyGenerator,
+    QuboMR2SSolver,
+    QuboSolver,
+    SAMR2SSolver,
+    SmallWorldSpec,
+    SnowballFaceClusterer,
+)
+
+
+def test_top_level_exports_support_component_composition() -> None:
+    assert Graph is not None
+    assert BalancedFaceGraphClusterer is not None
+    assert DegeneracyPruningFaceCyclePartitionStrategy is not None
+    assert Edge is not None
+    assert EmbeddingAwareFaceCyclePartitionStrategy is not None
+    assert EmbeddingEstimate is not None
+    assert QuboMR2SSolver is not None
+    assert ApspSumRanker is not None
+    assert Evaluator is not None
+    assert FlowPolyGenerator is not None
+    assert KMeansFaceClusterer is not None
+    assert NHopPolyGenerator is not None
+    assert NHop is not None
+    assert SmallWorldSpec is not None
+    assert QuboSolver is not None
+    assert SAMR2SSolver is not None
+    assert SnowballFaceClusterer is not None

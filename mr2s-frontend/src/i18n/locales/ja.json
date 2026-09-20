@@ -1,0 +1,80 @@
+{
+  "header": {
+    "title": "Metropolitan Ring Road System",
+    "subtitle": "無向グラフを入力してパス探索で最適化された方向を確認してください。",
+    "switchToDark": "ダークモードに切り替え",
+    "switchToLight": "ライトモードに切り替え",
+    "darkMode": "ダークモード",
+    "lightMode": "ライトモード"
+  },
+  "nav": {
+    "optimizer": "グラフ最適化",
+    "simulation": "シミュレーション"
+  },
+  "simulation": {
+    "title": "シミュレーション",
+    "description": "MR2S シミュレーションページです。"
+  },
+  "graphInput": {
+    "title": "グラフ入力",
+    "apiSelection": "API 選択",
+    "solverHint": {
+      "qubo": "グラフを分割し、各部分を QUBO + 焼きなましで解く",
+      "rawSa": "APSP とフロー指標を直接評価して辺の向きを焼きなます",
+      "robin": "DFS 1回で全辺の向きを確定。最速だが橋のないグラフが必要"
+    },
+    "vertices": "頂点（コンマ区切り）",
+    "verticesPlaceholder": "例: 1,2,3,4,5",
+    "edges": "辺（1行に1つ、スペースまたはコンマ区切り）",
+    "edgesPlaceholder": "例:\n1 2\n2 3\n3 4",
+    "drawGraph": "グラフを描画",
+    "pathSearch": "パス探索",
+    "reset": "リセット",
+    "benchmarkTitle": "ベンチマーク",
+    "nodeCount": "ノード数（最小3）",
+    "runBenchmark": "ベンチマーク実行"
+  },
+  "resultPanel": {
+    "title": "最適化結果",
+    "optimizedScore": "Optimized APSP 合計",
+    "bidirectionalScore": "Bidirectional APSP 合計",
+    "scoreDiff": "APSP 合計の差分",
+    "directedEdgeCount": "最適化された有向辺の数",
+    "unreachableNode": "（到達不能なノードあり）"
+  },
+  "graphVisualization": {
+    "placeholder": "グラフを入力して「グラフを描画」ボタンを押してください。"
+  },
+  "debugPanel": {
+    "show": "▶ デバッグを表示 (Request/Response)",
+    "hide": "▼ デバッグを非表示"
+  },
+  "loading": "最適化中...",
+  "validation": {
+    "verticesEmpty": "頂点が空です。",
+    "invalidVertex": "不正な頂点の値: \"{{value}}\"",
+    "duplicateVertices": "頂点に重複があります。",
+    "invalidEdgeFormat": "不正な辺の形式（{{line}}行目）: \"{{value}}\"。\"u v\" または \"u,v\" 形式で入力してください。",
+    "invalidEdgeValue": "不正な辺の値（{{line}}行目）: \"{{value}}\"",
+    "selfLoop": "自己ループは不可（{{line}}行目）: \"{{u}} {{v}}\"",
+    "vertexNotFound": "頂点 {{vertex}} が頂点リストにありません。（{{line}}行目）"
+  },
+  "errors": {
+    "unknown": "不明なエラーが発生しました。",
+    "cors": "CORSまたはネットワークエラー: サーバーに接続できません。ブラウザの開発者ツール（F12）> ネットワークタブでリクエストの状態を確認してください。サーバーがCORSを許可しているか確認が必要です。"
+  },
+  "language": "言語",
+  "benchmarkPanel": {
+    "title": "APSP 合計比較（ベンチマーク）",
+    "generating": "平面グラフを生成中...",
+    "running": "ベンチマーク実行中... （3種類 × 10回）",
+    "graphInfo": "グラフ: ノード{{nodes}}個、辺{{edges}}本",
+    "approach": "グラフタイプ",
+    "max": "最大 APSP 合計",
+    "min": "最小 APSP 合計",
+    "average": "平均 APSP 合計",
+    "weightBalance": "平均 Σ(In-Out)²",
+    "averageTime": "平均所要時間 (ms)",
+    "failures": "失敗回数"
+  }
+}

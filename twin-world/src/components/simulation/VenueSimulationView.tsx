@@ -1,0 +1,97 @@
+import { useEffect, useState } from "react";
+import type { Venue } from "../../domain/types";
+import { useVenueSimulation } from "../../simulation/useVenueSimulation";
+import { useAgentPovSelection } from "../../simulation/useAgentPovSelection";
+import { VenueScene } from "../../three/VenueScene";
+import { Agents } from "../../three/Agents";
+import { AgentMarkers } from "../../three/AgentMarkers";
+import { DensityHeatmap } from "../../three/DensityHeatmap";
+import { AgentPovCamera } from "../../three/AgentPovCamera";
+import { FreeCamera } from "../../three/FreeCamera";
+import { SimulationControls } from "./SimulationControls";
+import { ScenarioInput } from "./ScenarioInput";
+import { CameraModeToolbar, type CameraMode } from "./CameraModeToolbar";
+import { DEFAULT_AGENT_COUNT } from "../../domain/simPresets";
+import { simulationAlerts } from "../../simulation/alerts";
+
+export interface VenueSimulationViewProps {
+  venue: Venue;
+}
+
+export function VenueSimulationView({ venue }: VenueSimulationViewProps) {
+  const [population, setPopulation] = useState(DEFAULT_AGENT_COUNT);
+  // Fixed for now (task 5/6 scope). Baseline vs. MR2S-optimized comparison
+  // runs (task 8) must share this same seed so both start from identical
+  // spawn/destination assignments - see plan FR-09.
+  const [seed] = useState(1);
+  const [urgency, setUrgency] = useState(0);
+
+  const { simulation, controls } = useVenueSimulation(venue, { population, seed, urgency });
+  const counts = simulation.counts();
+  const metrics = simulation.metrics();
+  const bottleneckCount = simulation.bottleneckCorridorIds.size;
+  const alerts = simulationAlerts(counts, metrics.highPressureExposed, bottleneckCount);
+  const pov = useAgentPovSelection(simulation);
+  const [cameraMode, setCameraMode] = useState<CameraMode>("overview");
+  const [flySpeedScale, setFlySpeedScale] = useState(1);
+
+  // A new VenueSimulation instance (population change or explicit reset)
+  // invalidates any followed agent id, and free-fly position/orbit state
+  // don't carry meaning across runs either - drop back to the overview.
+  useEffect(() => {
+    setCameraMode("overview");
+  }, [simulation]);
+
+  return (
+    <div className="sim-view">
+      <ScenarioInput defaultPopulation={population} onApplyPopulation={setPopulation} />
+      <SimulationControls
+        playing={controls.playing}
+        onTogglePlaying={() => controls.setPlaying(!controls.playing)}
+        playbackRate={controls.playbackRate}
+        onChangePlaybackRate={controls.setPlaybackRate}
+        population={population}
+        onChangePopulation={setPopulation}
+        urgency={urgency}
+        onChangeUrgency={setUrgency}
+        onReset={controls.reset}
+        counts={counts}
+        metrics={metrics}
+        bottleneckCount={bottleneckCount}
+        elapsedSeconds={simulation.elapsedSeconds}
+      />
+      <CameraModeToolbar
+        mode={cameraMode}
+        onSelectOverview={() => {
+          pov.stop();
+          setCameraMode("overview");
+        }}
+        onSelectPov={() => {
+          pov.start();
+          setCameraMode("pov");
+        }}
+        onSelectFree={() => {
+          pov.stop();
+          setCameraMode("free");
+        }}
+        onNextAgent={pov.next}
+        flySpeedScale={flySpeedScale}
+        onChangeFlySpeedScale={setFlySpeedScale}
+      />
+      {alerts.length > 0 && (
+        <div className="sim-alert" role="alert">
+          {alerts.map((alert) => (
+            <span key={alert}>{alert}</span>
+          ))}
+        </div>
+      )}
+      <VenueScene venue={venue} disableOrbitControls={cameraMode !== "overview"} fov={cameraMode === "overview" ? 50 : 75}>
+        <DensityHeatmap simulation={simulation} />
+        <Agents simulation={simulation} capacity={population} />
+        <AgentMarkers simulation={simulation} capacity={population} />
+        {cameraMode === "pov" && pov.agentId && <AgentPovCamera simulation={simulation} agentId={pov.agentId} />}
+        {cameraMode === "free" && <FreeCamera speedScale={flySpeedScale} />}
+      </VenueScene>
+    </div>
+  );
+}

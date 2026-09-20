@@ -1,0 +1,165 @@
+% Short LaTeX Template (nolta2025.sty) for
+%
+%   2025 International Symposium on Nonlinear Theory and its Applications
+%
+% * This style file is based on nolta2003.sty which was distributed by
+%   the NOLTA2003 organizing committee.
+%
+% usage:
+%
+% \documentclass[twocolumn]{article}
+% \usepackage{nolta2025}
+%
+% for LaTeX 2.09 users:
+% \documentstyle[twocolumn,nolta2025]{article}
+%
+% \begin{document}
+%
+% \title{...}
+% \author{...}
+% \address{...}
+%
+% \maketitle
+%
+% \orcid{...}
+%
+% \abstract
+% Write your abstract here.
+% \endabstract
+%
+% \section{...}
+%   \subsection{...}
+%     \subsubsection{...}
+% \section{...}
+%
+% \section*{Acknowledgements}
+%
+% \begin{thebibliography}{99}
+% \bibitem{LABEL1}
+% \bibitem{LABEL2}
+%    .
+%    .
+%    .
+% \end{thebibliography}
+%
+% \end{document}
+%
+%
+\oddsidemargin=-5.4mm  % margin is set to 20mm
+\evensidemargin=-5.4mm % margin is set to 20mm
+
+\topmargin=4.6mm % top margin is set to 30.0mm
+\headheight=0pt
+\headsep=0pt
+\footskip=0pt
+\textheight=237mm
+\textwidth=170mm
+
+\columnsep=5mm
+\pagestyle{empty}
+\def\ninept{\def\baselinestretch{.95}\let\normalsize\small\normalsize}
+
+\def\maketitle{\par
+\begingroup
+\def\thefootnote{}%
+\def\@makefnmark{\hbox
+to 0pt{$^{\@thefnmark}$\hss}}
+\if@twocolumn
+\twocolumn[\@maketitle]
+\else \newpage
+\global\@topnum\z@ \@maketitle \fi\@thanks
+\endgroup
+\setcounter{footnote}{0}
+\let\maketitle\relax
+\let\@maketitle\relax
+\gdef\thefootnote{\arabic{footnote}}\gdef\@@savethanks{}%
+\gdef\@thanks{}\gdef\@author{}\gdef\@title{}\let\thanks\relax
+}
+
+\def\@maketitle{\newpage
+\null
+\vskip 5mm \begin{center}
+{\Large \bf \@title \par} \vskip 1.5em {\large \lineskip .5em
+\begin{tabular}[t]{c}\@author \end{tabular}}\par
+\vskip 4mm
+\begin{tabular}[t]{c}\@address \end{tabular}\par
+% \vskip 1.5em
+\end{center}
+}
+
+\def\title#1{\gdef\@title{#1}}
+\def\author#1{\gdef\@author{{#1}}}
+\def\address#1{\gdef\@address{#1}}
+
+%%%%%%% ORCID >>>
+\RequirePackage{graphicx}%
+\RequirePackage[hidelinks]{hyperref}
+\RequirePackage{xparse}
+\NewDocumentCommand{\linkorcid}{>{\SplitList{,}} m }{%
+\ProcessList{#1}{\sepNameOrcid}%
+}%
+\newcounter{setnameorcid}
+\NewDocumentCommand{\sepNameOrcid}{>{\SplitList{:}} m}{%
+\ifnum\thesetnameorcid>0%
+, %
+\fi %
+\ProcessList{#1}{%
+    \printNameOrcid%
+}%
+\stepcounter{setnameorcid}%
+}
+\newcounter{printnameorcid}[setnameorcid]
+\NewDocumentCommand{\printNameOrcid}{m}{%
+\ifnum\theprintnameorcid=1%
+\href{https://orcid.org/#1}{
+    $\vcenter{\hbox{\includegraphics[width=7.5pt]{orcid_icon.png}}}$\hspace{1pt}#1}%
+\else%
+#1: %
+\fi%
+\stepcounter{printnameorcid}%
+}
+\def\orcid#1{
+\gdef\thefootnote{\fnsymbol{footnote}}
+\footnote[0]{\hspace{-5mm} ORCID iDs \ \linkorcid{#1}
+%%%%%%% Creative Commons >>>
+\parbox[l]{83mm}{%
+\scalebox{.4}{%
+\href{https://creativecommons.org/licenses/by-nc-nd/4.0/deed}%
+{\includegraphics{by-nc-nd-nolta}}}~%
+\footnotesize
+This work is licensed under a Creative Commons Attribution Non Commercial,
+No Derivatives 4.0 License.
+\copyright IEICE \number\year
+}%
+}%
+%%%%%%% <<< Creative Commons
+}
+%%%%%%% <<< ORCID
+
+
+\let\@@savethanks\thanks
+\def\thanks#1{\gdef\thefootnote{}\@@savethanks{#1}}
+\def\sthanks#1{\gdef\thefootnote{\fnsymbol{footnote}}\@@savethanks{#1}}
+
+\def\section{\@startsection {section}{1}{\z@}{3.5ex plus 1ex minus.2ex}%
+{2.0ex plus .2ex}{\normalsize\bf}}
+\def\subsection{\@startsection {subsection}{2}{\z@}{2.5ex plus 1ex %
+minus .2ex}{1.5ex plus .2ex}{\normalsize\bf}}
+\def\subsubsection{\@startsection {subsubsection}{3}{\z@}{2.5ex plus %
+1ex minus .2ex}{1.5ex plus .2ex}{\normalsize\it}}
+
+\def\@seccntformat#1{\csname the#1\endcsname.\hskip 0.6em}
+
+\renewenvironment{abstract}{\begingroup\par\noindent\textbf{Abstract}---}{\endgroup}
+\newcommand{\email}[1]{\href{mailto:#1}{#1}}
+
+\def\thebibliography#1{\section*{\normalsize\bf \hfil References}\list
+{[\arabic{enumi}]}{\settowidth\labelwidth{[#1]}\leftmargin\labelwidth
+\advance\leftmargin\labelsep
+\usecounter{enumi}}
+\def\newblock{\hskip .11em plus .33em minus .07em}
+\sloppy\clubpenalty4000\widowpenalty4000
+\sfcode`\.=1000\relax}
+\let\endthebibliography=\endlist
+
+\flushbottom
