@@ -46,7 +46,7 @@ install_backend() {
   [ -d .venv ] || python3 -m venv .venv
   ./.venv/bin/pip install --upgrade pip
   ./.venv/bin/pip install -r requirements.txt
-  echo "실행: cd mr2s-backend && ./.venv/bin/python main.py  (http://localhost:8000)"
+  echo "실행: ./run.sh backend  (http://localhost:8000)"
 }
 
 install_web() {
@@ -58,7 +58,7 @@ install_web() {
     npm run build
   done
   echo "twin-world 는 실행 전에 .env.example 을 .env.local 로 복사하고 UPSTAGE_API_KEY 를 채운다."
-  echo "개발 서버 실행: cd <앱 디렉터리> && npm run dev  (http://localhost:5173)"
+  echo "개발 서버 실행: ./run.sh  (5173 · 5174 · 5175)"
 }
 
 install_analysis() {

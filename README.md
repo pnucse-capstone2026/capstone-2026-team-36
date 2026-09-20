@@ -154,6 +154,7 @@ sequenceDiagram
 capstone-2026-team-36
 ├── README.md
 ├── install_and_build.sh      전체 구성 요소 설치·빌드 스크립트
+├── run.sh                    backend 와 웹 클라이언트 실행·중지 스크립트
 ├── docs/                     제출 문서 (보고서 · 포스터 · 발표자료 · 자문의견서 · README 그림)
 ├── mr2s-module/              핵심 알고리즘 라이브러리 (Python)
 │   └── mr2s_module/          domain · reduction · cycle · qubo · solver · edge_orient · evaluator
@@ -271,8 +272,22 @@ capstone-2026-team-36
 Python 3.11 이상과 Node.js 20.19 이상(또는 22.12 이상)이 필요하다. D-Wave 계정과 `DWAVE_API_TOKEN`은 선택 사항이며, 없어도 simulated annealing backend로 모든 기능을 실행할 수 있다.
 
 ```bash
-./install_and_build.sh          # 전체 설치·빌드
+./install_and_build.sh   # 전체 설치·빌드
+./run.sh                 # backend 와 웹 클라이언트 세 개 실행
+./run.sh status          # 떠 있는 것과 주소 확인
+./run.sh stop            # 전부 내리기
 ```
+
+`./run.sh` 가 띄우는 주소는 다음과 같다. 로그는 `.run/logs/` 에 쌓인다.
+
+| 주소 | 내용 |
+| --- | --- |
+| http://localhost:5174 | twin-world — 디지털 트윈 시뮬레이션 (시연용) |
+| http://localhost:5173 | mr2s-frontend — 그래프 편집, 기법 비교 |
+| http://localhost:5175 | simulation-react — 2D 프로토타입 |
+| http://localhost:8000 | 최적화 API 서버. 화면은 없고 http://localhost:8000/api/v2/solvers 로 확인한다 |
+
+구성 요소를 하나씩 다루려면 아래처럼 실행한다.
 
 ```bash
 # 알고리즘 라이브러리
@@ -294,16 +309,7 @@ cd ../approach-analysis && pip install -r requirements.txt
 python main.py poster-results --sizes 5 10 20 --output-dir results/poster --no-cache
 ```
 
-설치가 끝나면 아래 네 가지를 각각 띄운다. 웹 클라이언트는 셋 다 Vite 기본 포트인 5173번을 쓰므로 함께 띄울 때는 `--port`로 나눈다.
-
-```bash
-./mr2s-backend/.venv/bin/python mr2s-backend/main.py                        # http://localhost:8000
-cd mr2s-frontend    && npm run dev -- --port 5173                           # 그래프 편집·기법 비교
-cd twin-world       && VITE_PROXY_TARGET=http://localhost:8000 npm run dev -- --port 5174   # 디지털 트윈
-cd simulation-react && VITE_PROXY_TARGET=http://localhost:8000 npm run dev -- --port 5175   # 2D 프로토타입
-```
-
-웹 클라이언트는 기본적으로 배포된 백엔드(`https://quantum.yunseong.dev`)를 프록시로 호출한다. `twin-world`와 `simulation-react`는 위처럼 `VITE_PROXY_TARGET`으로 로컬 백엔드를 가리킬 수 있고, `mr2s-frontend`는 프록시 대상이 `vite.config.ts`에 적혀 있어 그 파일을 고쳐야 한다.
+웹 클라이언트는 셋 다 Vite 기본 포트인 5173번을 쓰므로 함께 띄울 때는 `--port`로 나눈다. 기본값은 배포된 백엔드(`https://quantum.yunseong.dev`)를 프록시로 호출하는 것이고, `twin-world`와 `simulation-react`는 `VITE_PROXY_TARGET`으로 로컬 백엔드를 가리킬 수 있다. `mr2s-frontend`는 프록시 대상이 `vite.config.ts`에 적혀 있어 그 파일을 고쳐야 한다. `./run.sh`는 이 설정을 모두 적용해 띄운다.
 
 #### 5.2. 오류 발생 시 해결 방법
 
