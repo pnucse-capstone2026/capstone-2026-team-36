@@ -342,14 +342,8 @@ python main.py poster-results --sizes 5 10 20 --output-dir results/poster --no-c
 > **작성 필요** — `docs/03.발표자료/`의 두 파일은 아직 0바이트 자리표시자다.
 
 #### 6.2. 시연 영상
+[![MR2S 소개 영상](http://img.youtube.com/vi/VQp5b15zcJk/0.jpg)](https://www.youtube.com/watch?v=VQp5b15zcJk)
 
-소개 영상 페이지는 `documents/video/introduction/`에 있으며 GitHub Pages로 배포된다. 영상은 약 5분 40초 분량이며, 발표 시연에는 Twin World 시뮬레이션을 사용한다.
-
-> **작성 필요** — 아래 링크를 실제 영상 주소로 바꾼다.
->
-> ```markdown
-> [![MR2S 소개 영상](http://img.youtube.com/vi/{동영상ID}/0.jpg)](https://www.youtube.com/watch?v={동영상ID})
-> ```
 
 | 배포된 데모 | 주소 |
 | --- | --- |
